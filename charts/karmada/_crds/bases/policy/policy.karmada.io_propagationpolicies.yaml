@@ -18,7 +18,17 @@ spec:
     singular: propagationpolicy
   scope: Namespaced
   versions:
-  - name: v1alpha1
+  - additionalPrinterColumns:
+    - jsonPath: .spec.conflictResolution
+      name: CONFLICT-RESOLUTION
+      type: string
+    - jsonPath: .spec.priority
+      name: PRIORITY
+      type: string
+    - jsonPath: .metadata.creationTimestamp
+      name: AGE
+      type: date
+    name: v1alpha1
     schema:
       openAPIV3Schema:
         description: PropagationPolicy represents the policy that propagates a group
@@ -151,6 +161,10 @@ spec:
                           cluster from which the application is migrated.
                           Valid options are "Immediately", "Graciously" and "Never".
                           Defaults to "Graciously".
+                        enum:
+                        - Immediately
+                        - Graciously
+                        - Never
                         type: string
                     required:
                     - decisionConditions
@@ -249,6 +263,7 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                    x-kubernetes-list-type: atomic
                                 required:
                                 - key
                                 - operator
@@ -286,11 +301,13 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                    x-kubernetes-list-type: atomic
                                 required:
                                 - key
                                 - operator
                                 type: object
                               type: array
+                              x-kubernetes-list-type: atomic
                             matchLabels:
                               additionalProperties:
                                 type: string
@@ -357,6 +374,7 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                               - key
                               - operator
@@ -394,11 +412,13 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                               - key
                               - operator
                               type: object
                             type: array
+                            x-kubernetes-list-type: atomic
                           matchLabels:
                             additionalProperties:
                               type: string
@@ -545,6 +565,7 @@ spec:
                                                 items:
                                                   type: string
                                                 type: array
+                                                x-kubernetes-list-type: atomic
                                             required:
                                             - key
                                             - operator
@@ -583,11 +604,13 @@ spec:
                                                 items:
                                                   type: string
                                                 type: array
+                                                x-kubernetes-list-type: atomic
                                             required:
                                             - key
                                             - operator
                                             type: object
                                           type: array
+                                          x-kubernetes-list-type: atomic
                                         matchLabels:
                                           additionalProperties:
                                             type: string
@@ -744,11 +767,13 @@ spec:
                                 items:
                                   type: string
                                 type: array
+                                x-kubernetes-list-type: atomic
                             required:
                             - key
                             - operator
                             type: object
                           type: array
+                          x-kubernetes-list-type: atomic
                         matchLabels:
                           additionalProperties:
                             type: string
@@ -782,6 +807,31 @@ spec:
                   If specified, the policy will be dispatched by specified scheduler.
                   If not specified, the policy will be dispatched by default scheduler.
                 type: string
+              suspension:
+                description: |-
+                  Suspension declares the policy for suspending different aspects of propagation.
+                  nil means no suspension. no default values.
+                properties:
+                  dispatching:
+                    description: |-
+                      Dispatching controls whether dispatching should be suspended.
+                      nil means not suspend, no default value, only accepts 'true'.
+                      Note: true means stop propagating to all clusters. Can not co-exist
+                      with DispatchingOnClusters which is used to suspend particular clusters.
+                    type: boolean
+                  dispatchingOnClusters:
+                    description: |-
+                      DispatchingOnClusters declares a list of clusters to which the dispatching
+                      should be suspended.
+                      Note: Can not co-exist with Dispatching which is used to suspend all.
+                    properties:
+                      clusterNames:
+                        description: ClusterNames is the list of clusters to be selected.
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                type: object
             required:
             - resourceSelectors
             type: object
@@ -790,3 +840,4 @@ spec:
         type: object
     served: true
     storage: true
+    subresources: {}

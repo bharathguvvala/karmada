@@ -17,6 +17,7 @@ limitations under the License.
 package e2e
 
 import (
+	"fmt"
 	"time"
 
 	"github.com/onsi/ginkgo/v2"
@@ -113,7 +114,7 @@ var _ = ginkgo.Describe("Lazy activation policy testing", func() {
 				waitDeploymentPresentOnCluster(originalCluster, namespace, deploymentName)
 			})
 
-			ginkgo.By("step 2: after policy updated (cluster=member2, remove lazy activationPreference field), the propagation of deployment changed", func() {
+			ginkgo.By(fmt.Sprintf("step 2: after policy updated (cluster=%s, remove lazy activationPreference field), the propagation of deployment changed", modifiedCluster), func() {
 				// 1. remove lazy activationPreference field
 				policy.Spec.ActivationPreference = ""
 				// 2. update policy placement with clusterAffinities
@@ -137,7 +138,7 @@ var _ = ginkgo.Describe("Lazy activation policy testing", func() {
 					waitDeploymentPresentOnCluster(originalCluster, namespace, deploymentName)
 				})
 
-				ginkgo.By("step 2: after policy updated (cluster=member2, activationPreference=lazy), the propagation of deployment unchanged", func() {
+				ginkgo.By(fmt.Sprintf("step 2: after policy updated (cluster=%s, activationPreference=lazy), the propagation of deployment unchanged", modifiedCluster), func() {
 					// 1. activationPreference=lazy
 					policy.Spec.ActivationPreference = policyv1alpha1.LazyActivation
 					// 2. update policy placement with clusterAffinities
@@ -158,6 +159,25 @@ var _ = ginkgo.Describe("Lazy activation policy testing", func() {
 			})
 		})
 
+		// Combined Case 3 (Policy preemption)
+		// refer: https://github.com/karmada-io/karmada/blob/release-1.9/docs/proposals/scheduling/activation-preference/lazy-activation-preference.md#combined-case-3-policy-preemption
+
+		ginkgo.It("Combined Case 3 (Policy preemption)", func() {
+			ginkgo.By("step 1: deployment propagate success when policy created before it", func() {
+				waitDeploymentPresentOnCluster(originalCluster, namespace, deploymentName)
+			})
+
+			ginkgo.By(fmt.Sprintf("step 2: create PP2 (match nginx, cluster=%s, not lazy, priority=2, preemption=true)", modifiedCluster), func() {
+				policyHigherPriority.Spec.ActivationPreference = "" // remove lazy activationPreference field
+				framework.CreatePropagationPolicy(karmadaClient, policyHigherPriority)
+				waitDeploymentPresentOnCluster(modifiedCluster, namespace, deploymentName)
+			})
+
+			ginkgo.By("step 3: clean up", func() {
+				framework.RemovePropagationPolicyIfExist(karmadaClient, namespace, policyHigherPriorityName)
+			})
+		})
+
 		// Combined Case 4 (Policy preemption)
 		// refer: https://github.com/karmada-io/karmada/blob/release-1.9/docs/proposals/scheduling/activation-preference/lazy-activation-preference.md#combined-case-4-policy-preemption
 		ginkgo.It("Policy preemption", func() {
@@ -165,7 +185,7 @@ var _ = ginkgo.Describe("Lazy activation policy testing", func() {
 				waitDeploymentPresentOnCluster(originalCluster, namespace, deploymentName)
 			})
 
-			ginkgo.By("step 2: create PP2 (match nginx, cluster=member2, lazy, priority=2, preemption=true)", func() {
+			ginkgo.By(fmt.Sprintf("step 2: create PP2 (match nginx, cluster=%s, lazy, priority=2, preemption=true)", modifiedCluster), func() {
 				framework.CreatePropagationPolicy(karmadaClient, policyHigherPriority)
 				// 1. annotation of policy name changed
 				framework.WaitDeploymentFitWith(kubeClient, namespace, deploymentName, func(deployment *appsv1.Deployment) bool {

@@ -107,6 +107,15 @@ type CommandJoinOption struct {
 	// more details about running Kubernetes in multiple zones.
 	ClusterZones []string
 
+	// KarmadaAs represents the username to impersonate for the operation in karmada control plane. User could be a regular user or a service account in a namespace
+	KarmadaAs string
+
+	// KarmadaAsGroups represents groups to impersonate for the operation in karmada control plane, this flag can be repeated to specify multiple groups
+	KarmadaAsGroups []string
+
+	// KarmadaAsUID represents the UID to impersonate for the operation in karmada control plane.
+	KarmadaAsUID string
+
 	// DryRun tells if run the command in dry-run mode, without making any server requests.
 	DryRun bool
 }
@@ -150,6 +159,12 @@ func (j *CommandJoinOption) AddFlags(flags *pflag.FlagSet) {
 	flags.StringVar(&j.ClusterProvider, "cluster-provider", "", "Provider of the joining cluster. The Karmada scheduler can use this information to spread workloads across providers for higher availability.")
 	flags.StringVar(&j.ClusterRegion, "cluster-region", "", "The region of the joining cluster. The Karmada scheduler can use this information to spread workloads across regions for higher availability.")
 	flags.StringSliceVar(&j.ClusterZones, "cluster-zones", nil, "The zones of the joining cluster. The Karmada scheduler can use this information to spread workloads across zones for higher availability.")
+	flags.StringVar(&j.KarmadaAs, "karmada-as", "",
+		"Username to impersonate for the operation in karmada control plane. User could be a regular user or a service account in a namespace.")
+	flags.StringArrayVar(&j.KarmadaAsGroups, "karmada-as-group", []string{},
+		"Group to impersonate for the operation in karmada control plane, this flag can be repeated to specify multiple groups.")
+	flags.StringVar(&j.KarmadaAsUID, "karmada-as-uid", "",
+		"UID to impersonate for the operation in karmada control plane.")
 	flags.BoolVar(&j.DryRun, "dry-run", false, "Run the command in dry-run mode, without making any server requests.")
 }
 
@@ -164,6 +179,11 @@ func (j *CommandJoinOption) Run(f cmdutil.Factory) error {
 		return fmt.Errorf("failed to get control plane rest config. context: %s, kube-config: %s, error: %v",
 			*options.DefaultConfigFlags.Context, *options.DefaultConfigFlags.KubeConfig, err)
 	}
+
+	// Configure impersonation
+	controlPlaneRestConfig.Impersonate.UserName = j.KarmadaAs
+	controlPlaneRestConfig.Impersonate.Groups = j.KarmadaAsGroups
+	controlPlaneRestConfig.Impersonate.UID = j.KarmadaAsUID
 
 	// Get cluster config
 	clusterConfig, err := apiclient.RestConfig(j.ClusterContext, j.ClusterKubeConfig)

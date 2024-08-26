@@ -20,13 +20,13 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .spec.workload.manifests[*].kind
-      name: Workload-Kind
+      name: WORKLOAD-KIND
       type: string
     - jsonPath: .status.conditions[?(@.type=="Applied")].status
-      name: Applied
+      name: APPLIED
       type: string
     - jsonPath: .metadata.creationTimestamp
-      name: Age
+      name: AGE
       type: date
     name: v1alpha1
     schema:
@@ -54,6 +54,12 @@ spec:
           spec:
             description: Spec represents the desired behavior of Work.
             properties:
+              suspendDispatching:
+                description: |-
+                  SuspendDispatching controls whether dispatching should
+                  be suspended, nil means not suspend.
+                  Note: true means stop propagating to all clusters.
+                type: boolean
               workload:
                 description: Workload represents the manifest workload to be deployed
                   on managed cluster.

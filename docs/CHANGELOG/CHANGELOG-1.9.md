@@ -2,12 +2,42 @@
 <!-- DON'T EDIT THIS SECTION, INSTEAD RE-RUN doctoc TO UPDATE -->
 **Table of Contents**  *generated with [DocToc](https://github.com/thlorenz/doctoc)*
 
-- [v1.9.1](#v191)
-  - [Downloads for v1.9.1](#downloads-for-v191)
-  - [Changelog since v1.9.0](#changelog-since-v190)
+- [v1.9.6](#v196)
+  - [Downloads for v1.9.6](#downloads-for-v196)
+  - [Changelog since v1.9.5](#changelog-since-v195)
     - [Changes by Kind](#changes-by-kind)
       - [Bug Fixes](#bug-fixes)
       - [Others](#others)
+- [v1.9.5](#v195)
+  - [Downloads for v1.9.5](#downloads-for-v195)
+  - [Changelog since v1.9.4](#changelog-since-v194)
+    - [Changes by Kind](#changes-by-kind-1)
+      - [Bug Fixes](#bug-fixes-1)
+      - [Others](#others-1)
+- [v1.9.4](#v194)
+  - [Downloads for v1.9.4](#downloads-for-v194)
+  - [Changelog since v1.9.3](#changelog-since-v193)
+    - [Changes by Kind](#changes-by-kind-2)
+      - [Bug Fixes](#bug-fixes-2)
+      - [Others](#others-2)
+- [v1.9.3](#v193)
+  - [Downloads for v1.9.3](#downloads-for-v193)
+  - [Changelog since v1.9.2](#changelog-since-v192)
+    - [Changes by Kind](#changes-by-kind-3)
+      - [Bug Fixes](#bug-fixes-3)
+      - [Others](#others-3)
+- [v1.9.2](#v192)
+  - [Downloads for v1.9.2](#downloads-for-v192)
+  - [Changelog since v1.9.1](#changelog-since-v191)
+    - [Changes by Kind](#changes-by-kind-4)
+      - [Bug Fixes](#bug-fixes-4)
+      - [Others](#others-4)
+- [v1.9.1](#v191)
+  - [Downloads for v1.9.1](#downloads-for-v191)
+  - [Changelog since v1.9.0](#changelog-since-v190)
+    - [Changes by Kind](#changes-by-kind-5)
+      - [Bug Fixes](#bug-fixes-5)
+      - [Others](#others-5)
 - [v1.9.0](#v190)
   - [Downloads for v1.9.0](#downloads-for-v190)
   - [What's New](#whats-new)
@@ -17,7 +47,7 @@
   - [Other Notable Changes](#other-notable-changes)
     - [API Changes](#api-changes)
     - [Deprecation](#deprecation)
-    - [Bug Fixes](#bug-fixes-1)
+    - [Bug Fixes](#bug-fixes-6)
     - [Security](#security)
     - [Features & Enhancements](#features--enhancements)
   - [Other](#other)
@@ -27,6 +57,74 @@
   - [Contributors](#contributors)
 
 <!-- END doctoc generated TOC please keep comment here to allow auto update -->
+
+# v1.9.6
+## Downloads for v1.9.6
+
+Download v1.9.6 in the [v1.9.6 release page](https://github.com/karmada-io/karmada/releases/tag/v1.9.6).
+
+## Changelog since v1.9.5
+### Changes by Kind
+#### Bug Fixes
+None.
+
+#### Others
+- The base image `alpine` now has been promoted from `alpine:3.20.1` to `alpine:3.20.2`. ([#5269](https://github.com/karmada-io/karmada/pull/5269))
+- Bump golang version to `v1.20.14`. ([#5374](https://github.com/karmada-io/karmada/pull/5374) @zhzhuang-zju)
+
+# v1.9.5
+## Downloads for v1.9.5
+
+Download v1.9.5 in the [v1.9.5 release page](https://github.com/karmada-io/karmada/releases/tag/v1.9.5).
+
+## Changelog since v1.9.4
+### Changes by Kind
+#### Bug Fixes
+- `karmada-controller-manager`: fix the issue of residual work in the MultiClusterService feature. ([#5212](https://github.com/karmada-io/karmada/pull/5212), @XiShanYongYe-Chang)
+
+#### Others
+None.
+
+# v1.9.4
+## Downloads for v1.9.4
+
+Download v1.9.4 in the [v1.9.4 release page](https://github.com/karmada-io/karmada/releases/tag/v1.9.4).
+
+## Changelog since v1.9.3
+### Changes by Kind
+#### Bug Fixes
+- `karmada-controller-manager`: Fixed the issue that the default resource interpreter doesn't accurately interpret the numbers of replicas. ([#5107](https://github.com/karmada-io/karmada/pull/5107), @whitewindmills)
+
+#### Others
+- The base image `alpine` now has been promoted from `alpine:3.20.0` to `alpine:3.20.1`. ([#5089](https://github.com/karmada-io/karmada/pull/5089))
+
+# v1.9.3
+## Downloads for v1.9.3
+
+Download v1.9.3 in the [v1.9.3 release page](https://github.com/karmada-io/karmada/releases/tag/v1.9.3).
+
+## Changelog since v1.9.2
+### Changes by Kind
+#### Bug Fixes
+- `karmada-scheduler-estimator`: Fixed the `Unschedulable` result returned by plugins to be treated as an exception issue. ([#5026](https://github.com/karmada-io/karmada/pull/5026), @RainbowMango)
+- `karmada-controller-manager`: Fixed an issue that the cluster-status-controller overwrites the remedyActions field. ([#5045](https://github.com/karmada-io/karmada/pull/5045), @XiShanYongYe-Chang)
+
+#### Others
+None.
+
+# v1.9.2
+## Downloads for v1.9.2
+
+Download v1.9.2 in the [v1.9.2 release page](https://github.com/karmada-io/karmada/releases/tag/v1.9.2).
+
+## Changelog since v1.9.1
+### Changes by Kind
+#### Bug Fixes
+None.
+
+#### Others
+- `karmadactl`:  The policy for when to pull a container image now is `IfNotPresent in `init` command. ([#4988](https://github.com/karmada-io/karmada/pull/4988), @zhzhuang-zju)
+- The base image `alpine` now has been promoted from `alpine:3.19.1` to `alpine:3.20.0`.
 
 # v1.9.1
 ## Downloads for v1.9.1

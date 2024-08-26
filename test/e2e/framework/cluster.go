@@ -25,6 +25,7 @@ import (
 
 	"github.com/onsi/gomega"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/dynamic"
@@ -223,9 +224,6 @@ func setClusterLabel(c client.Client, clusterName string) error {
 	err := wait.PollUntilContextTimeout(context.TODO(), 2*time.Second, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		clusterObj := &clusterv1alpha1.Cluster{}
 		if err := c.Get(ctx, client.ObjectKey{Name: clusterName}, clusterObj); err != nil {
-			if apierrors.IsConflict(err) {
-				return false, nil
-			}
 			return false, err
 		}
 		if clusterObj.Labels == nil {
@@ -336,9 +334,6 @@ func SetClusterRegion(c client.Client, clusterName string, regionName string) er
 	return wait.PollUntilContextTimeout(context.TODO(), 2*time.Second, 10*time.Second, true, func(ctx context.Context) (done bool, err error) {
 		clusterObj := &clusterv1alpha1.Cluster{}
 		if err := c.Get(ctx, client.ObjectKey{Name: clusterName}, clusterObj); err != nil {
-			if apierrors.IsConflict(err) {
-				return false, nil
-			}
 			return false, err
 		}
 
@@ -351,4 +346,21 @@ func SetClusterRegion(c client.Client, clusterName string, regionName string) er
 		}
 		return true, nil
 	})
+}
+
+// UpdateClusterStatusCondition updates the target cluster status condition.
+func UpdateClusterStatusCondition(client karmada.Interface, clusterName string, condition metav1.Condition) {
+	gomega.Eventually(func() (bool, error) {
+		cluster, err := client.ClusterV1alpha1().Clusters().Get(context.TODO(), clusterName, metav1.GetOptions{})
+		if err != nil {
+			return false, err
+		}
+
+		meta.SetStatusCondition(&cluster.Status.Conditions, condition)
+		_, err = client.ClusterV1alpha1().Clusters().UpdateStatus(context.TODO(), cluster, metav1.UpdateOptions{})
+		if err != nil {
+			return false, err
+		}
+		return true, nil
+	}, pollTimeout, pollInterval).Should(gomega.Equal(true))
 }

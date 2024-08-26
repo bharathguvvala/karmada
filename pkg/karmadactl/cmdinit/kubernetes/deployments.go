@@ -35,6 +35,8 @@ const (
 	deploymentAPIVersion = "apps/v1"
 	deploymentKind       = "Deployment"
 	portName             = "server"
+	metricsPortName      = "metrics"
+	defaultMetricsPort   = 8080
 
 	// KubeConfigSecretAndMountName is the secret and volume mount name of karmada kubeconfig
 	KubeConfigSecretAndMountName                                = "kubeconfig"
@@ -454,16 +456,31 @@ func (i *CommandInitOption) makeKarmadaSchedulerDeployment() *appsv1.Deployment 
 					"--secure-port=10351",
 					"--enable-scheduler-estimator=true",
 					"--leader-elect=true",
+					"--scheduler-estimator-ca-file=/etc/karmada/pki/ca.crt",
+					"--scheduler-estimator-cert-file=/etc/karmada/pki/karmada.crt",
+					"--scheduler-estimator-key-file=/etc/karmada/pki/karmada.key",
 					fmt.Sprintf("--leader-elect-resource-namespace=%s", i.Namespace),
 					"--v=4",
 				},
 				LivenessProbe: livenessProbe,
+				Ports: []corev1.ContainerPort{
+					{
+						Name:          metricsPortName,
+						ContainerPort: 10351,
+						Protocol:      corev1.ProtocolTCP,
+					},
+				},
 				VolumeMounts: []corev1.VolumeMount{
 					{
 						Name:      KubeConfigSecretAndMountName,
 						ReadOnly:  true,
 						MountPath: kubeConfigContainerMountPath,
 						SubPath:   KubeConfigSecretAndMountName,
+					},
+					{
+						Name:      globaloptions.KarmadaCertsName,
+						ReadOnly:  true,
+						MountPath: karmadaCertsVolumeMountPath,
 					},
 				},
 			},
@@ -474,6 +491,14 @@ func (i *CommandInitOption) makeKarmadaSchedulerDeployment() *appsv1.Deployment 
 				VolumeSource: corev1.VolumeSource{
 					Secret: &corev1.SecretVolumeSource{
 						SecretName: KubeConfigSecretAndMountName,
+					},
+				},
+			},
+			{
+				Name: globaloptions.KarmadaCertsName,
+				VolumeSource: corev1.VolumeSource{
+					Secret: &corev1.SecretVolumeSource{
+						SecretName: globaloptions.KarmadaCertsName,
 					},
 				},
 			},
@@ -567,6 +592,7 @@ func (i *CommandInitOption) makeKarmadaControllerManagerDeployment() *appsv1.Dep
 					"/bin/karmada-controller-manager",
 					"--kubeconfig=/etc/kubeconfig",
 					"--bind-address=0.0.0.0",
+					"--metrics-bind-address=:8080",
 					"--cluster-status-update-frequency=10s",
 					"--secure-port=10357",
 					fmt.Sprintf("--leader-elect-resource-namespace=%s", i.Namespace),
@@ -577,6 +603,11 @@ func (i *CommandInitOption) makeKarmadaControllerManagerDeployment() *appsv1.Dep
 					{
 						Name:          portName,
 						ContainerPort: controllerManagerSecurePort,
+						Protocol:      corev1.ProtocolTCP,
+					},
+					{
+						Name:          metricsPortName,
+						ContainerPort: defaultMetricsPort,
 						Protocol:      corev1.ProtocolTCP,
 					},
 				},
@@ -686,6 +717,7 @@ func (i *CommandInitOption) makeKarmadaWebhookDeployment() *appsv1.Deployment {
 					"/bin/karmada-webhook",
 					"--kubeconfig=/etc/kubeconfig",
 					"--bind-address=0.0.0.0",
+					"--metrics-bind-address=:8080",
 					fmt.Sprintf("--secure-port=%v", webhookTargetPort),
 					fmt.Sprintf("--cert-dir=%s", webhookCertVolumeMountPath),
 					"--v=4",
@@ -694,6 +726,11 @@ func (i *CommandInitOption) makeKarmadaWebhookDeployment() *appsv1.Deployment {
 					{
 						Name:          webhookPortName,
 						ContainerPort: webhookTargetPort,
+						Protocol:      corev1.ProtocolTCP,
+					},
+					{
+						Name:          metricsPortName,
+						ContainerPort: defaultMetricsPort,
 						Protocol:      corev1.ProtocolTCP,
 					},
 				},

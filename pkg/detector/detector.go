@@ -65,9 +65,6 @@ import (
 var (
 	propagationPolicyMarkedLabels = []string{
 		policyv1alpha1.PropagationPolicyPermanentIDLabel,
-		// TODO(whitewindmills): Delete the following two lines in a future version.
-		policyv1alpha1.PropagationPolicyNamespaceLabel,
-		policyv1alpha1.PropagationPolicyNameLabel,
 	}
 	propagationPolicyMarkedAnnotations = []string{
 		policyv1alpha1.PropagationPolicyNamespaceAnnotation,
@@ -75,8 +72,6 @@ var (
 	}
 	clusterPropagationPolicyMarkedLabels = []string{
 		policyv1alpha1.ClusterPropagationPolicyPermanentIDLabel,
-		// TODO(whitewindmills): Delete the following line in a future version.
-		policyv1alpha1.ClusterPropagationPolicyLabel,
 	}
 	clusterPropagationPolicyMarkedAnnotations = []string{
 		policyv1alpha1.ClusterPropagationPolicyAnnotation,
@@ -470,9 +465,6 @@ func (d *ResourceDetector) ApplyPolicy(object *unstructured.Unstructured, object
 	}
 
 	policyLabels := map[string]string{
-		// TODO(whitewindmills): Delete the following two lines in a future version.
-		policyv1alpha1.PropagationPolicyNamespaceLabel:   policy.GetNamespace(),
-		policyv1alpha1.PropagationPolicyNameLabel:        policy.GetName(),
 		policyv1alpha1.PropagationPolicyPermanentIDLabel: policyID,
 	}
 	policyAnnotations := map[string]string{
@@ -508,6 +500,7 @@ func (d *ResourceDetector) ApplyPolicy(object *unstructured.Unstructured, object
 			bindingCopy.Spec.Placement = binding.Spec.Placement
 			bindingCopy.Spec.Failover = binding.Spec.Failover
 			bindingCopy.Spec.ConflictResolution = binding.Spec.ConflictResolution
+			bindingCopy.Spec.Suspension = binding.Spec.Suspension
 			excludeClusterPolicy(bindingCopy.Labels)
 			return nil
 		})
@@ -564,8 +557,6 @@ func (d *ResourceDetector) ApplyClusterPolicy(object *unstructured.Unstructured,
 	}
 
 	policyLabels := map[string]string{
-		// TODO(whitewindmills): Delete the following line in a future version.
-		policyv1alpha1.ClusterPropagationPolicyLabel:            policy.GetName(),
 		policyv1alpha1.ClusterPropagationPolicyPermanentIDLabel: policyID,
 	}
 	policyAnnotations := map[string]string{
@@ -604,6 +595,7 @@ func (d *ResourceDetector) ApplyClusterPolicy(object *unstructured.Unstructured,
 				bindingCopy.Spec.Placement = binding.Spec.Placement
 				bindingCopy.Spec.Failover = binding.Spec.Failover
 				bindingCopy.Spec.ConflictResolution = binding.Spec.ConflictResolution
+				bindingCopy.Spec.Suspension = binding.Spec.Suspension
 				return nil
 			})
 			return err
@@ -649,6 +641,7 @@ func (d *ResourceDetector) ApplyClusterPolicy(object *unstructured.Unstructured,
 				bindingCopy.Spec.Placement = binding.Spec.Placement
 				bindingCopy.Spec.Failover = binding.Spec.Failover
 				bindingCopy.Spec.ConflictResolution = binding.Spec.ConflictResolution
+				bindingCopy.Spec.Suspension = binding.Spec.Suspension
 				return nil
 			})
 			return err
@@ -722,9 +715,6 @@ func (d *ResourceDetector) ClaimPolicyForObject(object *unstructured.Unstructure
 		}
 	}
 
-	// TODO(whitewindmills): Delete the following two lines in a future version.
-	objLabels[policyv1alpha1.PropagationPolicyNamespaceLabel] = policy.Namespace
-	objLabels[policyv1alpha1.PropagationPolicyNameLabel] = policy.Name
 	objLabels[policyv1alpha1.PropagationPolicyPermanentIDLabel] = policyID
 
 	objectAnnotations := object.GetAnnotations()
@@ -751,8 +741,6 @@ func (d *ResourceDetector) ClaimClusterPolicyForObject(object *unstructured.Unst
 	}
 
 	objectCopy := object.DeepCopy()
-	// TODO(whitewindmills): Delete the following line in a future version.
-	util.MergeLabel(objectCopy, policyv1alpha1.ClusterPropagationPolicyLabel, policy.Name)
 	util.MergeLabel(objectCopy, policyv1alpha1.ClusterPropagationPolicyPermanentIDLabel, policyID)
 
 	util.MergeAnnotation(objectCopy, policyv1alpha1.ClusterPropagationPolicyAnnotation, policy.Name)
@@ -780,6 +768,7 @@ func (d *ResourceDetector) BuildResourceBinding(object *unstructured.Unstructure
 			Placement:          &policySpec.Placement,
 			Failover:           policySpec.Failover,
 			ConflictResolution: policySpec.ConflictResolution,
+			Suspension:         policySpec.Suspension,
 			Resource: workv1alpha2.ObjectReference{
 				APIVersion:      object.GetAPIVersion(),
 				Kind:            object.GetKind(),
@@ -824,6 +813,7 @@ func (d *ResourceDetector) BuildClusterResourceBinding(object *unstructured.Unst
 			Placement:          &policySpec.Placement,
 			Failover:           policySpec.Failover,
 			ConflictResolution: policySpec.ConflictResolution,
+			Suspension:         policySpec.Suspension,
 			Resource: workv1alpha2.ObjectReference{
 				APIVersion:      object.GetAPIVersion(),
 				Kind:            object.GetKind(),
@@ -995,16 +985,6 @@ func (d *ResourceDetector) ReconcilePropagationPolicy(key util.QueueKey) error {
 		return nil
 	}
 
-	// TODO(whitewindmills): In order to adapt to the upgrade scenario, we temporarily add finalizer here.
-	// Transplant it to karmada-webhook in the next release. More info: https://github.com/karmada-io/karmada/pull/4836#discussion_r1568186728.
-	if controllerutil.AddFinalizer(propagationObject, util.PropagationPolicyControllerFinalizer) {
-		if err = d.Client.Update(context.TODO(), propagationObject); err != nil {
-			klog.Errorf("Failed to add finalizer for PropagationPolicy(%s), err: %v", ckey.NamespaceKey(), err)
-			return err
-		}
-		return nil
-	}
-
 	klog.Infof("PropagationPolicy(%s) has been added or updated.", ckey.NamespaceKey())
 	return d.HandlePropagationPolicyCreationOrUpdate(propagationObject)
 }
@@ -1103,16 +1083,6 @@ func (d *ResourceDetector) ReconcileClusterPropagationPolicy(key util.QueueKey) 
 				klog.Errorf("Failed to remove finalizer for ClusterPropagationPolicy(%s), err: %v", ckey.NamespaceKey(), err)
 				return err
 			}
-		}
-		return nil
-	}
-
-	// TODO(whitewindmills): In order to adapt to the upgrade scenario, we temporarily add finalizer here.
-	// Transplant it to karmada-webhook in the next release. More info: https://github.com/karmada-io/karmada/pull/4836#discussion_r1568186728.
-	if controllerutil.AddFinalizer(propagationObject, util.ClusterPropagationPolicyControllerFinalizer) {
-		if err = d.Client.Update(context.TODO(), propagationObject); err != nil {
-			klog.Errorf("Failed to add finalizer for ClusterPropagationPolicy(%s), err: %v", ckey.NamespaceKey(), err)
-			return err
 		}
 		return nil
 	}
@@ -1365,32 +1335,33 @@ func (d *ResourceDetector) HandleClusterPropagationPolicyCreationOrUpdate(policy
 
 // CleanupResourceTemplateMarks removes marks, such as labels and annotations, from object referencing by objRef.
 func (d *ResourceDetector) CleanupResourceTemplateMarks(objRef workv1alpha2.ObjectReference, cleanupFunc func(obj metav1.Object)) error {
-	workload, err := helper.FetchResourceTemplate(d.DynamicClient, d.InformerManager, d.RESTMapper, objRef)
+	gvr, err := restmapper.GetGroupVersionResource(d.RESTMapper, schema.FromAPIVersionAndKind(objRef.APIVersion, objRef.Kind))
 	if err != nil {
-		// do nothing if resource template not exist, it might have been removed.
-		if apierrors.IsNotFound(err) {
-			return nil
+		klog.Errorf("Failed to convert GVR from GVK(%s/%s), err: %v", objRef.APIVersion, objRef.Kind, err)
+		return err
+	}
+
+	return retry.RetryOnConflict(retry.DefaultRetry, func() (err error) {
+		workload, err := d.DynamicClient.Resource(gvr).Namespace(objRef.Namespace).Get(context.TODO(), objRef.Name, metav1.GetOptions{})
+		if err != nil {
+			// do nothing if resource template not exist, it might have been removed.
+			if apierrors.IsNotFound(err) {
+				return nil
+			}
+			klog.Errorf("Failed to fetch resource(kind=%s, %s/%s): err is %v", objRef.Kind, objRef.Namespace, objRef.Name, err)
+			return err
 		}
-		klog.Errorf("Failed to fetch resource(kind=%s, %s/%s): %v", objRef.Kind, objRef.Namespace, objRef.Name, err)
-		return err
-	}
 
-	workload = workload.DeepCopy()
-	cleanupFunc(workload)
+		cleanupFunc(workload)
 
-	gvr, err := restmapper.GetGroupVersionResource(d.RESTMapper, workload.GroupVersionKind())
-	if err != nil {
-		klog.Errorf("Failed to delete resource(%s/%s) labels as mapping GVK to GVR failed: %v", workload.GetNamespace(), workload.GetName(), err)
-		return err
-	}
-
-	newWorkload, err := d.DynamicClient.Resource(gvr).Namespace(workload.GetNamespace()).Update(context.TODO(), workload, metav1.UpdateOptions{})
-	if err != nil {
-		klog.Errorf("Failed to update resource %v/%v, err is %v ", workload.GetNamespace(), workload.GetName(), err)
-		return err
-	}
-	klog.V(2).Infof("Updated resource template(kind=%s, %s/%s) successfully", newWorkload.GetKind(), newWorkload.GetNamespace(), newWorkload.GetName())
-	return nil
+		_, err = d.DynamicClient.Resource(gvr).Namespace(workload.GetNamespace()).Update(context.TODO(), workload, metav1.UpdateOptions{})
+		if err != nil {
+			klog.Errorf("Failed to update resource(kind=%s, %s/%s): err is %v", workload.GetKind(), workload.GetNamespace(), workload.GetName(), err)
+			return err
+		}
+		klog.V(2).Infof("Updated resource template(kind=%s, %s/%s) successfully", workload.GetKind(), workload.GetNamespace(), workload.GetName())
+		return nil
+	})
 }
 
 // CleanupResourceBindingMarks removes marks, such as labels and annotations, from resource binding.

@@ -98,6 +98,11 @@ preInstallJob:
   ## Define policies that determine when to delete corresponding hook resources: before-hook-creation,hook-succeeded,hook-failed
   hookDeletePolicy: "hook-succeeded"
 
+## static-resource job config
+staticResourceJob:
+  tolerations: []
+  nodeSelector: {}
+
 ## post-install job config
 postInstallJob:
   tolerations: []
@@ -366,7 +371,7 @@ apiServer:
   image:
     registry: registry.k8s.io
     repository: kube-apiserver
-    tag: "v1.27.11"
+    tag: "v1.29.6"
     ## Specify a imagePullPolicy, defaults to 'IfNotPresent'
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
@@ -416,6 +421,7 @@ apiServer:
   ## will take effect when 'apiServer.serviceType' is 'NodePort'.
   ## If no port is specified, the nodePort will be automatically assigned.
   nodePort: 0
+  serviceClusterIPRange: "10.96.0.0/12"
   maxRequestsInflight: 1500
   maxMutatingRequestsInflight: 500
   ## @param apiserver.strategy strategy of the apiserver
@@ -506,10 +512,7 @@ metricsAdapter:
     registry: docker.io
     repository: karmada/karmada-metrics-adapter
     tag: *karmadaImageVersion
-    ## Specify a imagePullPolicy
-    ## Defaults to 'Always' if image tag is 'latest', else set to 'IfNotPresent'
-    ##
-    pullPolicy: Always
+    pullPolicy: *karmadaImagePullPolicy
     ## Optionally specify an array of imagePullSecrets.
     ## Secrets must be manually created in the namespace.
     ## Example:
@@ -566,7 +569,7 @@ kubeControllerManager:
   image:
     registry: registry.k8s.io
     repository: kube-controller-manager
-    tag: "v1.27.11"
+    tag: "v1.29.6"
     ## Specify a imagePullPolicy, defaults to 'IfNotPresent'
     pullPolicy: IfNotPresent
     ## Optionally specify an array of imagePullSecrets.
@@ -604,6 +607,8 @@ kubeControllerManager:
   controllers: namespace,garbagecollector,serviceaccount-token,ttl-after-finished,bootstrapsigner,tokencleaner,csrapproving,csrcleaner,csrsigning,clusterrole-aggregation
   ## @param apiServer.podDisruptionBudget
   podDisruptionBudget: *podDisruptionBudget
+  serviceClusterIPRange: "10.96.0.0/12"
+  clusterCIDR: "10.244.0.0/16"
 
 ## etcd config
 etcd:

@@ -77,7 +77,7 @@ func (c *StatusController) Reconcile(ctx context.Context, req controllerruntime.
 		return controllerruntime.Result{}, nil
 	}
 
-	if err := c.collectQuotaStatus(quota); err != nil {
+	if err := c.collectQuotaStatus(ctx, quota); err != nil {
 		klog.Errorf("Failed to collect status from works to federatedResourceQuota(%s), error: %v", req.NamespacedName.String(), err)
 		c.EventRecorder.Eventf(quota, corev1.EventTypeWarning, events.EventReasonCollectFederatedResourceQuotaStatusFailed, err.Error())
 		return controllerruntime.Result{}, err
@@ -134,8 +134,8 @@ func (c *StatusController) SetupWithManager(mgr controllerruntime.Manager) error
 		Complete(c)
 }
 
-func (c *StatusController) collectQuotaStatus(quota *policyv1alpha1.FederatedResourceQuota) error {
-	workList, err := helper.GetWorksByLabelsSet(c.Client, labels.Set{
+func (c *StatusController) collectQuotaStatus(ctx context.Context, quota *policyv1alpha1.FederatedResourceQuota) error {
+	workList, err := helper.GetWorksByLabelsSet(ctx, c.Client, labels.Set{
 		util.FederatedResourceQuotaNamespaceLabel: quota.Namespace,
 		util.FederatedResourceQuotaNameLabel:      quota.Name,
 	})
@@ -160,20 +160,11 @@ func (c *StatusController) collectQuotaStatus(quota *policyv1alpha1.FederatedRes
 	}
 
 	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
-		quota.Status = *quotaStatus
-		updateErr := c.Status().Update(context.TODO(), quota)
-		if updateErr == nil {
+		_, err = helper.UpdateStatus(ctx, c.Client, quota, func() error {
+			quota.Status = *quotaStatus
 			return nil
-		}
-
-		updated := &policyv1alpha1.FederatedResourceQuota{}
-		if err = c.Get(context.TODO(), client.ObjectKey{Namespace: quota.Namespace, Name: quota.Name}, updated); err == nil {
-			quota = updated
-		} else {
-			klog.Errorf("Failed to get updated  federatedResourceQuota(%s): %v", klog.KObj(quota).String(), err)
-		}
-
-		return updateErr
+		})
+		return err
 	})
 }
 

@@ -28,6 +28,8 @@ spec:
     spec:
       {{- include "karmada.apiServer.imagePullSecrets" . | nindent 6 }}
       automountServiceAccountToken: false
+      initContainers:
+        {{- include "karmada.initContainer.waitEtcd" . | nindent 8 }}
       containers:
         - name: {{ $name }}-apiserver
           image: {{ template "karmada.apiServer.image" . }}
@@ -61,7 +63,7 @@ spec:
             - --service-account-issuer=https://kubernetes.default.svc.{{ .Values.clusterDomain }}
             - --service-account-key-file=/etc/kubernetes/pki/karmada.key
             - --service-account-signing-key-file=/etc/kubernetes/pki/karmada.key
-            - --service-cluster-ip-range=10.96.0.0/12
+            - --service-cluster-ip-range={{ .Values.apiServer.serviceClusterIPRange }}
             - --proxy-client-cert-file=/etc/kubernetes/pki/front-proxy-client.crt
             - --proxy-client-key-file=/etc/kubernetes/pki/front-proxy-client.key
             - --requestheader-allowed-names=front-proxy-client
@@ -135,6 +137,7 @@ spec:
       {{- toYaml . | nindent 8 }}
       {{- end }}
       volumes:
+      {{- include "karmada.init-sa-secret.volume" . | nindent 8 }}
         - name: apiserver-cert
           secret:
             secretName: {{ $name }}-cert

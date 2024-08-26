@@ -17605,7 +17605,7 @@
       ],
       "properties": {
         "luaScript": {
-          "description": "LuaScript holds the Lua script that is used to interpret the dependencies of a specific resource. The script should implement a function as follows:\n\n```\n  luaScript: \u003e\n      function GetDependencies(desiredObj)\n          dependencies = {}\n          if desiredObj.spec.serviceAccountName ~= nil and desiredObj.spec.serviceAccountName ~= \"default\" then\n              dependency = {}\n              dependency.apiVersion = \"v1\"\n              dependency.kind = \"ServiceAccount\"\n              dependency.name = desiredObj.spec.serviceAccountName\n              dependency.namespace = desiredObj.namespace\n              dependencies[1] = {}\n              dependencies[1] = dependency\n          end\n          return dependencies\n      end\n```\n\nThe content of the LuaScript needs to be a whole function including both declaration and implementation.\n\nThe parameters will be supplied by the system:\n  - desiredObj: the object represents the configuration to be applied\n      to the member cluster.\n\nThe returned value should be expressed by a slice of DependentObjectReference.",
+          "description": "LuaScript holds the Lua script that is used to interpret the dependencies of a specific resource. The script should implement a function as follows:\n\n```\n  luaScript: \u003e\n      function GetDependencies(desiredObj)\n          dependencies = {}\n          serviceAccountName = desiredObj.spec.template.spec.serviceAccountName\n          if serviceAccountName ~= nil and serviceAccountName ~= \"default\" then\n              dependency = {}\n              dependency.apiVersion = \"v1\"\n              dependency.kind = \"ServiceAccount\"\n              dependency.name = serviceAccountName\n              dependency.namespace = desiredObj.metadata.namespace\n              dependencies[1] = dependency\n          end\n          return dependencies\n      end\n```\n\nThe content of the LuaScript needs to be a whole function including both declaration and implementation.\n\nThe parameters will be supplied by the system:\n  - desiredObj: the object represents the configuration to be applied\n      to the member cluster.\n\nThe returned value should be expressed by a slice of DependentObjectReference.",
           "type": "string",
           "default": ""
         }
@@ -17944,6 +17944,9 @@
     "com.github.karmada-io.karmada.pkg.apis.networking.v1alpha1.ClusterSelector": {
       "description": "ClusterSelector specifies the cluster to be selected.",
       "type": "object",
+      "required": [
+        "name"
+      ],
       "properties": {
         "name": {
           "description": "Name is the name of the cluster to be selected.",
@@ -18748,7 +18751,8 @@
       "description": "LabelAnnotationOverrider represents the rules dedicated to handling workload labels/annotations",
       "type": "object",
       "required": [
-        "operator"
+        "operator",
+        "value"
       ],
       "properties": {
         "operator": {
@@ -19114,6 +19118,10 @@
         "schedulerName": {
           "description": "SchedulerName represents which scheduler to proceed the scheduling. If specified, the policy will be dispatched by specified scheduler. If not specified, the policy will be dispatched by default scheduler.",
           "type": "string"
+        },
+        "suspension": {
+          "description": "Suspension declares the policy for suspending different aspects of propagation. nil means no suspension. no default values.",
+          "$ref": "#/definitions/com.github.karmada-io.karmada.pkg.apis.policy.v1alpha1.Suspension"
         }
       }
     },
@@ -19249,6 +19257,34 @@
           "type": "integer",
           "format": "int64",
           "default": 0
+        }
+      }
+    },
+    "com.github.karmada-io.karmada.pkg.apis.policy.v1alpha1.SuspendClusters": {
+      "description": "SuspendClusters represents a group of clusters that should be suspended from propagating. Note: No plan to introduce the label selector or field selector to select clusters yet, as it would make the system unpredictable.",
+      "type": "object",
+      "properties": {
+        "clusterNames": {
+          "description": "ClusterNames is the list of clusters to be selected.",
+          "type": "array",
+          "items": {
+            "type": "string",
+            "default": ""
+          }
+        }
+      }
+    },
+    "com.github.karmada-io.karmada.pkg.apis.policy.v1alpha1.Suspension": {
+      "description": "Suspension defines the policy for suspending different aspects of propagation.",
+      "type": "object",
+      "properties": {
+        "dispatching": {
+          "description": "Dispatching controls whether dispatching should be suspended. nil means not suspend, no default value, only accepts 'true'. Note: true means stop propagating to all clusters. Can not co-exist with DispatchingOnClusters which is used to suspend particular clusters.",
+          "type": "boolean"
+        },
+        "dispatchingOnClusters": {
+          "description": "DispatchingOnClusters declares a list of clusters to which the dispatching should be suspended. Note: Can not co-exist with Dispatching which is used to suspend all.",
+          "$ref": "#/definitions/com.github.karmada-io.karmada.pkg.apis.policy.v1alpha1.SuspendClusters"
         }
       }
     },
@@ -19410,7 +19446,8 @@
       "description": "OpenSearchConfig holds the necessary configuration for client to access and config an OpenSearch server.",
       "type": "object",
       "required": [
-        "addresses"
+        "addresses",
+        "secretRef"
       ],
       "properties": {
         "addresses": {
@@ -19715,6 +19752,10 @@
       "description": "WorkSpec defines the desired state of Work.",
       "type": "object",
       "properties": {
+        "suspendDispatching": {
+          "description": "SuspendDispatching controls whether dispatching should be suspended, nil means not suspend. Note: true means stop propagating to all clusters.",
+          "type": "boolean"
+        },
         "workload": {
           "description": "Workload represents the manifest workload to be deployed on managed cluster.",
           "default": {},
@@ -20166,6 +20207,10 @@
         "schedulerName": {
           "description": "SchedulerName represents which scheduler to proceed the scheduling. It inherits directly from the associated PropagationPolicy(or ClusterPropagationPolicy).",
           "type": "string"
+        },
+        "suspension": {
+          "description": "Suspension declares the policy for suspending different aspects of propagation. nil means no suspension. no default values.",
+          "$ref": "#/definitions/com.github.karmada-io.karmada.pkg.apis.policy.v1alpha1.Suspension"
         }
       }
     },
@@ -20838,7 +20883,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.api.core.v1.LoadBalancerIngress"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -20855,7 +20901,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.api.core.v1.NodeSelectorTerm"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       },
       "x-kubernetes-map-type": "atomic"
@@ -20892,7 +20939,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -20906,7 +20954,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.api.core.v1.NodeSelectorRequirement"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "matchFields": {
           "description": "A list of node selector requirements by node's fields.",
@@ -20914,7 +20963,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.api.core.v1.NodeSelectorRequirement"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       },
       "x-kubernetes-map-type": "atomic"
@@ -21160,7 +21210,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.api.networking.v1.IngressLoadBalancerIngress"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -21331,7 +21382,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ServerAddressByClientCIDR"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "versions": {
           "description": "versions are the versions supported in this group.",
@@ -21339,7 +21391,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.GroupVersionForDiscovery"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       },
       "x-kubernetes-group-version-kind": [
@@ -21367,7 +21420,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.APIGroup"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "kind": {
           "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
@@ -21399,7 +21453,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "group": {
           "description": "group is the preferred group of the resource.  Empty implies the group of the containing resource list. For subresources, this may have a different value, for example: Scale\".",
@@ -21426,7 +21481,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "singularName": {
           "description": "singularName is the singular name of the resource.  This allows clients to handle plural and singular opaquely. The singularName is more correct for reporting status on a single item and both singular and plural are allowed from the kubectl CLI interface.",
@@ -21478,7 +21534,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.APIResource"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       },
       "x-kubernetes-group-version-kind": [
@@ -21545,7 +21602,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "gracePeriodSeconds": {
           "description": "The duration in seconds before the object should be deleted. Value must be non-negative integer. The value zero indicates delete immediately. If this value is nil, the default grace period for the specified type will be used. Defaults to a per object value if not specified. zero means delete immediately.",
@@ -21876,6 +21934,11 @@
           "version": "v1beta1"
         },
         {
+          "group": "storagemigration.k8s.io",
+          "kind": "DeleteOptions",
+          "version": "v1alpha1"
+        },
+        {
           "group": "work.karmada.io",
           "kind": "DeleteOptions",
           "version": "v1alpha1"
@@ -21921,7 +21984,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.LabelSelectorRequirement"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "matchLabels": {
           "description": "matchLabels is a map of {key,value} pairs. A single {key,value} in the matchLabels map is equivalent to an element of matchExpressions, whose key field is \"key\", the operator is \"In\", and the values array contains only \"value\". The requirements are ANDed.",
@@ -21958,7 +22022,8 @@
           "items": {
             "type": "string",
             "default": ""
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         }
       }
     },
@@ -22051,6 +22116,7 @@
             "type": "string",
             "default": ""
           },
+          "x-kubernetes-list-type": "set",
           "x-kubernetes-patch-strategy": "merge"
         },
         "generateName": {
@@ -22076,7 +22142,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.ManagedFieldsEntry"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "name": {
           "description": "Name must be unique within a namespace. Is required when creating resources, although some resources may allow a client to request the generation of an appropriate name automatically. Name is primarily intended for creation idempotence and configuration definition. Cannot be updated. More info: https://kubernetes.io/docs/concepts/overview/working-with-objects/names#names",
@@ -22093,6 +22160,10 @@
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.OwnerReference"
           },
+          "x-kubernetes-list-map-keys": [
+            "uid"
+          ],
+          "x-kubernetes-list-type": "map",
           "x-kubernetes-patch-merge-key": "uid",
           "x-kubernetes-patch-strategy": "merge"
         },
@@ -22204,7 +22275,8 @@
         },
         "details": {
           "description": "Extended data associated with the reason.  Each reason may define its own extended details. This field is optional and the data returned is not guaranteed to conform to any schema except that defined by the reason type.",
-          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.StatusDetails"
+          "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.StatusDetails",
+          "x-kubernetes-list-type": "atomic"
         },
         "kind": {
           "description": "Kind is a string value representing the REST resource this object represents. Servers may infer this from the endpoint the client submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds",
@@ -22269,7 +22341,8 @@
           "items": {
             "default": {},
             "$ref": "#/definitions/io.k8s.apimachinery.pkg.apis.meta.v1.StatusCause"
-          }
+          },
+          "x-kubernetes-list-type": "atomic"
         },
         "group": {
           "description": "The group attribute of the resource associated with the status StatusReason.",
@@ -22621,6 +22694,11 @@
           "group": "storage.k8s.io",
           "kind": "WatchEvent",
           "version": "v1beta1"
+        },
+        {
+          "group": "storagemigration.k8s.io",
+          "kind": "WatchEvent",
+          "version": "v1alpha1"
         },
         {
           "group": "work.karmada.io",

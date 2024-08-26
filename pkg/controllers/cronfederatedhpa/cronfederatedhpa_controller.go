@@ -1,9 +1,12 @@
 /*
 Copyright 2023 The Karmada Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -91,7 +94,7 @@ func (c *CronFHPAController) Reconcile(ctx context.Context, req controllerruntim
 
 	newRuleSets := sets.New[string]()
 	for _, rule := range cronFHPA.Spec.Rules {
-		if err = c.processCronRule(cronFHPA, rule); err != nil {
+		if err = c.processCronRule(ctx, cronFHPA, rule); err != nil {
 			return controllerruntime.Result{}, err
 		}
 		newRuleSets.Insert(rule.Name)
@@ -103,7 +106,7 @@ func (c *CronFHPAController) Reconcile(ctx context.Context, req controllerruntim
 			continue
 		}
 		c.CronHandler.StopRuleExecutor(req.NamespacedName.String(), name)
-		if err = c.removeCronFHPAHistory(cronFHPA, name); err != nil {
+		if err = c.removeCronFHPAHistory(ctx, cronFHPA, name); err != nil {
 			return controllerruntime.Result{}, err
 		}
 	}
@@ -122,7 +125,7 @@ func (c *CronFHPAController) SetupWithManager(mgr controllerruntime.Manager) err
 }
 
 // processCronRule processes the cron rule
-func (c *CronFHPAController) processCronRule(cronFHPA *autoscalingv1alpha1.CronFederatedHPA, rule autoscalingv1alpha1.CronFederatedHPARule) error {
+func (c *CronFHPAController) processCronRule(ctx context.Context, cronFHPA *autoscalingv1alpha1.CronFederatedHPA, rule autoscalingv1alpha1.CronFederatedHPARule) error {
 	cronFHPAKey := helper.GetCronFederatedHPAKey(cronFHPA)
 	if ruleOld, exists := c.CronHandler.RuleCronExecutorExists(cronFHPAKey, rule.Name); exists {
 		if equality.Semantic.DeepEqual(ruleOld, rule) {
@@ -139,7 +142,7 @@ func (c *CronFHPAController) processCronRule(cronFHPA *autoscalingv1alpha1.CronF
 		}
 	}
 
-	if err := c.updateRuleHistory(cronFHPA, rule); err != nil {
+	if err := c.updateRuleHistory(ctx, cronFHPA, rule); err != nil {
 		c.EventRecorder.Event(cronFHPA, corev1.EventTypeWarning, "UpdateCronFederatedHPAFailed", err.Error())
 		return err
 	}
@@ -147,7 +150,7 @@ func (c *CronFHPAController) processCronRule(cronFHPA *autoscalingv1alpha1.CronF
 }
 
 // updateRuleHistory updates the rule history
-func (c *CronFHPAController) updateRuleHistory(cronFHPA *autoscalingv1alpha1.CronFederatedHPA, rule autoscalingv1alpha1.CronFederatedHPARule) error {
+func (c *CronFHPAController) updateRuleHistory(ctx context.Context, cronFHPA *autoscalingv1alpha1.CronFederatedHPA, rule autoscalingv1alpha1.CronFederatedHPARule) error {
 	var nextExecutionTime *metav1.Time
 	if !helper.IsCronFederatedHPARuleSuspend(rule) {
 		// If rule is not suspended, we should set the nextExecutionTime filed, or the nextExecutionTime will be nil
@@ -178,7 +181,7 @@ func (c *CronFHPAController) updateRuleHistory(cronFHPA *autoscalingv1alpha1.Cro
 		cronFHPA.Status.ExecutionHistories = append(cronFHPA.Status.ExecutionHistories, ruleHistory)
 	}
 
-	if err := c.Client.Status().Update(context.Background(), cronFHPA); err != nil {
+	if err := c.Client.Status().Update(ctx, cronFHPA); err != nil {
 		klog.Errorf("Fail to update CronFederatedHPA(%s/%s) rule(%s)'s next execution time:%v",
 			cronFHPA.Namespace, cronFHPA.Name, rule.Name, err)
 		return err
@@ -188,7 +191,7 @@ func (c *CronFHPAController) updateRuleHistory(cronFHPA *autoscalingv1alpha1.Cro
 }
 
 // removeCronFHPAHistory removes the rule history in status
-func (c *CronFHPAController) removeCronFHPAHistory(cronFHPA *autoscalingv1alpha1.CronFederatedHPA, ruleName string) error {
+func (c *CronFHPAController) removeCronFHPAHistory(ctx context.Context, cronFHPA *autoscalingv1alpha1.CronFederatedHPA, ruleName string) error {
 	exists := false
 	for index, history := range cronFHPA.Status.ExecutionHistories {
 		if history.RuleName != ruleName {
@@ -202,7 +205,7 @@ func (c *CronFHPAController) removeCronFHPAHistory(cronFHPA *autoscalingv1alpha1
 	if !exists {
 		return nil
 	}
-	if err := c.Client.Status().Update(context.Background(), cronFHPA); err != nil {
+	if err := c.Client.Status().Update(ctx, cronFHPA); err != nil {
 		c.EventRecorder.Event(cronFHPA, corev1.EventTypeWarning, "UpdateCronFederatedHPAFailed", err.Error())
 		klog.Errorf("Fail to remove CronFederatedHPA(%s/%s) rule(%s) history:%v", cronFHPA.Namespace, cronFHPA.Name, ruleName, err)
 		return err

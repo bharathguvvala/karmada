@@ -18,10 +18,10 @@ spec:
   versions:
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=="Ready")].status
-      name: Ready
+      name: READY
       type: string
     - jsonPath: .metadata.creationTimestamp
-      name: Age
+      name: AGE
       type: date
     name: v1alpha1
     schema:
@@ -306,6 +306,7 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                        x-kubernetes-list-type: atomic
                                       dataSource:
                                         description: |-
                                           dataSource field can be used to specify either:
@@ -450,11 +451,13 @@ spec:
                                                   items:
                                                     type: string
                                                   type: array
+                                                  x-kubernetes-list-type: atomic
                                               required:
                                               - key
                                               - operator
                                               type: object
                                             type: array
+                                            x-kubernetes-list-type: atomic
                                           matchLabels:
                                             additionalProperties:
                                               type: string
@@ -482,7 +485,7 @@ spec:
                                           If the resource referred to by volumeAttributesClass does not exist, this PersistentVolumeClaim will be
                                           set to a Pending state, as reflected by the modifyVolumeStatus field, until such as a resource
                                           exists.
-                                          More info: https://kubernetes.io/docs/concepts/storage/persistent-volumes#volumeattributesclass
+                                          More info: https://kubernetes.io/docs/concepts/storage/volume-attributes-classes/
                                           (Alpha) Using this field requires the VolumeAttributesClass feature gate to be enabled.
                                         type: string
                                       volumeMode:
@@ -1728,6 +1731,34 @@ spec:
                               More info: https://kubernetes.io/docs/concepts/configuration/manage-resources-containers/
                             type: object
                         type: object
+                    type: object
+                type: object
+              crdTarball:
+                description: |-
+                  CRDTarball specifies the source from which the Karmada CRD tarball should be downloaded, along with the download policy to use.
+                  If not set, the operator will download the tarball from a GitHub release.
+                  By default, it will download the tarball of the same version as the operator itself.
+                  For instance, if the operator's version is v1.10.0, the tarball will be downloaded from the following location:
+                  https://github.com/karmada-io/karmada/releases/download/v1.10.0/crds.tar.gz
+                  By default, the operator will only attempt to download the tarball if it's not yet present in the local cache.
+                properties:
+                  crdDownloadPolicy:
+                    default: IfNotPresent
+                    description: |-
+                      CRDDownloadPolicy specifies a policy that should be used to download the CRD tarball.
+                      Valid values are "Always" and "IfNotPresent".
+                      Defaults to "IfNotPresent".
+                    enum:
+                    - Always
+                    - IfNotPresent
+                    type: string
+                  httpSource:
+                    description: HTTPSource specifies how to download the CRD tarball
+                      via either HTTP or HTTPS protocol.
+                    properties:
+                      url:
+                        description: URL specifies the URL of the CRD tarball resource.
+                        type: string
                     type: object
                 type: object
               featureGates:

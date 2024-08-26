@@ -120,11 +120,13 @@ func NewCmdInit(parentCommand string) *cobra.Command {
 	// kube image registry
 	flags.StringVarP(&opts.KubeImageMirrorCountry, "kube-image-mirror-country", "", "", "Country code of the kube image registry to be used. For Chinese mainland users, set it to cn")
 	flags.StringVarP(&opts.KubeImageRegistry, "kube-image-registry", "", "", "Kube image registry. For Chinese mainland users, you may use local gcr.io mirrors such as registry.cn-hangzhou.aliyuncs.com/google_containers to override default kube image registry")
-	flags.StringVar(&opts.KubeImageTag, "kube-image-tag", "v1.27.11", "Choose a specific Kubernetes version for the control plane.")
+	flags.StringVar(&opts.KubeImageTag, "kube-image-tag", "v1.29.6", "Choose a specific Kubernetes version for the control plane.")
 	// cert
 	flags.StringVar(&opts.ExternalIP, "cert-external-ip", "", "the external IP of Karmada certificate (e.g 192.168.1.2,172.16.1.2)")
 	flags.StringVar(&opts.ExternalDNS, "cert-external-dns", "", "the external DNS of Karmada certificate (e.g localhost,localhost.com)")
 	flags.DurationVar(&opts.CertValidity, "cert-validity-period", cert.Duration365d, "the validity period of Karmada certificate (e.g 8760h0m0s, that is 365 days)")
+	flags.StringVarP(&opts.CaCertFile, "ca-cert-file", "", "", "The root CA certificate file which will be used to issue new certificates for Karmada components. If not set, a new self-signed root CA certificate will be generated. This must be used together with --ca-key-file.")
+	flags.StringVarP(&opts.CaKeyFile, "ca-key-file", "", "", "The root CA private key file which will be used to issue new certificates for Karmada components. If not set, a new self-signed root CA key will be generated. This must be used together with --ca-cert-file.")
 	// Kubernetes
 	flags.StringVarP(&opts.Namespace, "namespace", "n", "karmada-system", "Kubernetes namespace")
 	flags.StringVar(&opts.StorageClassesName, "storage-classes-name", "", "Kubernetes StorageClasses Name")

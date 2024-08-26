@@ -1,9 +1,12 @@
 /*
 Copyright 2023 The Karmada Authors.
+
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -31,7 +34,6 @@ import (
 	"k8s.io/apiserver/pkg/authentication/user"
 	"k8s.io/apiserver/pkg/endpoints/handlers/responsewriters"
 	"k8s.io/apiserver/pkg/endpoints/request"
-	apirequest "k8s.io/apiserver/pkg/endpoints/request"
 	"k8s.io/apiserver/pkg/registry/rest"
 	restclient "k8s.io/client-go/rest"
 	"k8s.io/klog/v2"
@@ -356,7 +358,7 @@ func doClusterRequest(
 }
 
 // requestURLStr returns the request resource url string.
-func requestURLStr(urlStr string, requestInfo *apirequest.RequestInfo) string {
+func requestURLStr(urlStr string, requestInfo *request.RequestInfo) string {
 	parts := []string{requestInfo.APIPrefix}
 	if requestInfo.APIGroup != "" {
 		parts = append(parts, requestInfo.APIGroup)

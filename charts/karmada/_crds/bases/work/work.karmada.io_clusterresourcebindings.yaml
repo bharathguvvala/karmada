@@ -222,13 +222,13 @@ spec:
       status: {}
   - additionalPrinterColumns:
     - jsonPath: .status.conditions[?(@.type=="Scheduled")].status
-      name: Scheduled
+      name: SCHEDULED
       type: string
     - jsonPath: .status.conditions[?(@.type=="FullyApplied")].status
-      name: FullyApplied
+      name: FULLYAPPLIED
       type: string
     - jsonPath: .metadata.creationTimestamp
-      name: Age
+      name: AGE
       type: date
     name: v1alpha2
     schema:
@@ -335,6 +335,10 @@ spec:
                           cluster from which the application is migrated.
                           Valid options are "Immediately", "Graciously" and "Never".
                           Defaults to "Graciously".
+                        enum:
+                        - Immediately
+                        - Graciously
+                        - Never
                         type: string
                     required:
                     - decisionConditions
@@ -514,6 +518,7 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                    x-kubernetes-list-type: atomic
                                 required:
                                 - key
                                 - operator
@@ -551,11 +556,13 @@ spec:
                                     items:
                                       type: string
                                     type: array
+                                    x-kubernetes-list-type: atomic
                                 required:
                                 - key
                                 - operator
                                 type: object
                               type: array
+                              x-kubernetes-list-type: atomic
                             matchLabels:
                               additionalProperties:
                                 type: string
@@ -622,6 +629,7 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                               - key
                               - operator
@@ -659,11 +667,13 @@ spec:
                                   items:
                                     type: string
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               required:
                               - key
                               - operator
                               type: object
                             type: array
+                            x-kubernetes-list-type: atomic
                           matchLabels:
                             additionalProperties:
                               type: string
@@ -810,6 +820,7 @@ spec:
                                                 items:
                                                   type: string
                                                 type: array
+                                                x-kubernetes-list-type: atomic
                                             required:
                                             - key
                                             - operator
@@ -848,11 +859,13 @@ spec:
                                                 items:
                                                   type: string
                                                 type: array
+                                                x-kubernetes-list-type: atomic
                                             required:
                                             - key
                                             - operator
                                             type: object
                                           type: array
+                                          x-kubernetes-list-type: atomic
                                         matchLabels:
                                           additionalProperties:
                                             type: string
@@ -977,11 +990,13 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                        x-kubernetes-list-type: atomic
                                     required:
                                     - key
                                     - operator
                                     type: object
                                   type: array
+                                  x-kubernetes-list-type: atomic
                                 matchFields:
                                   description: A list of node selector requirements
                                     by node's fields.
@@ -1009,14 +1024,17 @@ spec:
                                         items:
                                           type: string
                                         type: array
+                                        x-kubernetes-list-type: atomic
                                     required:
                                     - key
                                     - operator
                                     type: object
                                   type: array
+                                  x-kubernetes-list-type: atomic
                               type: object
                               x-kubernetes-map-type: atomic
                             type: array
+                            x-kubernetes-list-type: atomic
                         required:
                         - nodeSelectorTerms
                         type: object
@@ -1173,6 +1191,31 @@ spec:
                   SchedulerName represents which scheduler to proceed the scheduling.
                   It inherits directly from the associated PropagationPolicy(or ClusterPropagationPolicy).
                 type: string
+              suspension:
+                description: |-
+                  Suspension declares the policy for suspending different aspects of propagation.
+                  nil means no suspension. no default values.
+                properties:
+                  dispatching:
+                    description: |-
+                      Dispatching controls whether dispatching should be suspended.
+                      nil means not suspend, no default value, only accepts 'true'.
+                      Note: true means stop propagating to all clusters. Can not co-exist
+                      with DispatchingOnClusters which is used to suspend particular clusters.
+                    type: boolean
+                  dispatchingOnClusters:
+                    description: |-
+                      DispatchingOnClusters declares a list of clusters to which the dispatching
+                      should be suspended.
+                      Note: Can not co-exist with Dispatching which is used to suspend all.
+                    properties:
+                      clusterNames:
+                        description: ClusterNames is the list of clusters to be selected.
+                        items:
+                          type: string
+                        type: array
+                    type: object
+                type: object
             required:
             - resource
             type: object
