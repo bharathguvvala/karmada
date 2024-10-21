@@ -361,14 +361,14 @@ func (s *Scheduler) doScheduleBinding(namespace, name string) (err error) {
 	if placementChanged(*rb.Spec.Placement, appliedPlacementStr, rb.Status.SchedulerObservedAffinityName) {
 		// policy placement changed, need schedule
 		klog.Infof("Start to schedule ResourceBinding(%s/%s) as placement changed", namespace, name)
-		err = s.scheduleResourceBinding(rb, false)
+		err = s.scheduleResourceBinding(rb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
 	if util.IsBindingReplicasChanged(&rb.Spec, rb.Spec.Placement.ReplicaScheduling) {
 		// binding replicas changed, need reschedule
 		klog.Infof("Reschedule ResourceBinding(%s/%s) as replicas scaled down or scaled up", namespace, name)
-		err = s.scheduleResourceBinding(rb, false)
+		err = s.scheduleResourceBinding(rb)
 		metrics.BindingSchedule(string(ScaleSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
@@ -376,7 +376,7 @@ func (s *Scheduler) doScheduleBinding(namespace, name string) (err error) {
 	if util.RescheduleRequired(rb.Spec.RescheduleTriggeredAt, rb.Status.LastScheduledTime) {
 		// explicitly triggered reschedule
 		klog.Infof("Reschedule ResourceBinding(%s/%s) as explicitly triggered reschedule", namespace, name)
-		err = s.scheduleResourceBinding(rb, true)
+		err = s.scheduleResourceBinding(rb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
@@ -385,7 +385,7 @@ func (s *Scheduler) doScheduleBinding(namespace, name string) (err error) {
 		// Duplicated resources should always be scheduled. Note: non-workload is considered as duplicated
 		// even if scheduling type is divided.
 		klog.V(3).Infof("Start to schedule ResourceBinding(%s/%s) as scheduling type is duplicated", namespace, name)
-		err = s.scheduleResourceBinding(rb, false)
+		err = s.scheduleResourceBinding(rb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
@@ -432,21 +432,21 @@ func (s *Scheduler) doScheduleClusterBinding(name string) (err error) {
 	if placementChanged(*crb.Spec.Placement, appliedPlacementStr, crb.Status.SchedulerObservedAffinityName) {
 		// policy placement changed, need schedule
 		klog.Infof("Start to schedule ClusterResourceBinding(%s) as placement changed", name)
-		err = s.scheduleClusterResourceBinding(crb, false)
+		err = s.scheduleClusterResourceBinding(crb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
 	if util.IsBindingReplicasChanged(&crb.Spec, crb.Spec.Placement.ReplicaScheduling) {
 		// binding replicas changed, need reschedule
 		klog.Infof("Reschedule ClusterResourceBinding(%s) as replicas scaled down or scaled up", name)
-		err = s.scheduleClusterResourceBinding(crb, false)
+		err = s.scheduleClusterResourceBinding(crb)
 		metrics.BindingSchedule(string(ScaleSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
 	if util.RescheduleRequired(crb.Spec.RescheduleTriggeredAt, crb.Status.LastScheduledTime) {
 		// explicitly triggered reschedule
 		klog.Infof("Start to schedule ClusterResourceBinding(%s) as explicitly triggered reschedule", name)
-		err = s.scheduleClusterResourceBinding(crb, true)
+		err = s.scheduleClusterResourceBinding(crb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
@@ -455,7 +455,7 @@ func (s *Scheduler) doScheduleClusterBinding(name string) (err error) {
 		// Duplicated resources should always be scheduled. Note: non-workload is considered as duplicated
 		// even if scheduling type is divided.
 		klog.V(3).Infof("Start to schedule ClusterResourceBinding(%s) as scheduling type is duplicated", name)
-		err = s.scheduleClusterResourceBinding(crb, false)
+		err = s.scheduleClusterResourceBinding(crb)
 		metrics.BindingSchedule(string(ReconcileSchedule), utilmetrics.DurationInSeconds(start), err)
 		return err
 	}
@@ -473,7 +473,7 @@ func (s *Scheduler) doScheduleClusterBinding(name string) (err error) {
 	return nil
 }
 
-func (s *Scheduler) scheduleResourceBinding(rb *workv1alpha2.ResourceBinding, performFreshScheduling bool) (err error) {
+func (s *Scheduler) scheduleResourceBinding(rb *workv1alpha2.ResourceBinding) (err error) {
 	defer func() {
 		condition, ignoreErr := getConditionByError(err)
 		if updateErr := patchBindingStatusCondition(s.KarmadaClient, rb, condition); updateErr != nil {
@@ -487,7 +487,7 @@ func (s *Scheduler) scheduleResourceBinding(rb *workv1alpha2.ResourceBinding, pe
 	}()
 
 	if rb.Spec.Placement.ClusterAffinities != nil {
-		return s.scheduleResourceBindingWithClusterAffinities(rb, performFreshScheduling)
+		return s.scheduleResourceBindingWithClusterAffinities(rb)
 	}
 	return s.scheduleResourceBindingWithClusterAffinity(rb)
 }
@@ -520,7 +520,7 @@ func (s *Scheduler) scheduleResourceBindingWithClusterAffinity(rb *workv1alpha2.
 	return err
 }
 
-func (s *Scheduler) scheduleResourceBindingWithClusterAffinities(rb *workv1alpha2.ResourceBinding, performFreshScheduling bool) error {
+func (s *Scheduler) scheduleResourceBindingWithClusterAffinities(rb *workv1alpha2.ResourceBinding) error {
 	klog.V(4).InfoS("Begin scheduling resourceBinding with ClusterAffinities", "resourceBinding", klog.KObj(rb))
 	defer klog.V(4).InfoS("End scheduling resourceBinding with ClusterAffinities", "resourceBinding", klog.KObj(rb))
 
@@ -536,7 +536,7 @@ func (s *Scheduler) scheduleResourceBindingWithClusterAffinities(rb *workv1alpha
 	)
 
 	affinityIndex := getAffinityIndex(rb.Spec.Placement.ClusterAffinities, rb.Status.SchedulerObservedAffinityName)
-	if performFreshScheduling {
+	if util.RescheduleRequired(rb.Spec.RescheduleTriggeredAt, rb.Status.LastScheduledTime) {
 		affinityIndex = 0
 	}
 	updatedStatus := rb.Status.DeepCopy()
@@ -614,7 +614,7 @@ func (s *Scheduler) patchScheduleResultForResourceBinding(oldBinding *workv1alph
 	return nil
 }
 
-func (s *Scheduler) scheduleClusterResourceBinding(crb *workv1alpha2.ClusterResourceBinding, performFreshScheduling bool) (err error) {
+func (s *Scheduler) scheduleClusterResourceBinding(crb *workv1alpha2.ClusterResourceBinding) (err error) {
 	defer func() {
 		condition, ignoreErr := getConditionByError(err)
 		if updateErr := patchClusterBindingStatusCondition(s.KarmadaClient, crb, condition); updateErr != nil {
@@ -628,7 +628,7 @@ func (s *Scheduler) scheduleClusterResourceBinding(crb *workv1alpha2.ClusterReso
 	}()
 
 	if crb.Spec.Placement.ClusterAffinities != nil {
-		return s.scheduleClusterResourceBindingWithClusterAffinities(crb, performFreshScheduling)
+		return s.scheduleClusterResourceBindingWithClusterAffinities(crb)
 	}
 	return s.scheduleClusterResourceBindingWithClusterAffinity(crb)
 }
@@ -661,7 +661,7 @@ func (s *Scheduler) scheduleClusterResourceBindingWithClusterAffinity(crb *workv
 	return err
 }
 
-func (s *Scheduler) scheduleClusterResourceBindingWithClusterAffinities(crb *workv1alpha2.ClusterResourceBinding, performFreshScheduling bool) error {
+func (s *Scheduler) scheduleClusterResourceBindingWithClusterAffinities(crb *workv1alpha2.ClusterResourceBinding) error {
 	klog.V(4).InfoS("Begin scheduling clusterResourceBinding with ClusterAffinities", "clusterResourceBinding", klog.KObj(crb))
 	defer klog.V(4).InfoS("End scheduling clusterResourceBinding with ClusterAffinities", "clusterResourceBinding", klog.KObj(crb))
 
@@ -677,7 +677,7 @@ func (s *Scheduler) scheduleClusterResourceBindingWithClusterAffinities(crb *wor
 	)
 
 	affinityIndex := getAffinityIndex(crb.Spec.Placement.ClusterAffinities, crb.Status.SchedulerObservedAffinityName)
-	if performFreshScheduling {
+	if util.RescheduleRequired(crb.Spec.RescheduleTriggeredAt, crb.Status.LastScheduledTime) {
 		affinityIndex = 0
 	}
 	updatedStatus := crb.Status.DeepCopy()
