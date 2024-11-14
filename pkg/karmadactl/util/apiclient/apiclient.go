@@ -98,12 +98,12 @@ func NewClientSet(c *rest.Config) (*kubernetes.Clientset, error) {
 }
 
 // NewCRDsClient is to create a clientset ClientSet
-func NewCRDsClient(c *rest.Config) (*clientset.Clientset, error) {
+func NewCRDsClient(c *rest.Config) (clientset.Interface, error) {
 	return clientset.NewForConfig(c)
 }
 
 // NewAPIRegistrationClient is to create an apiregistration ClientSet
-func NewAPIRegistrationClient(c *rest.Config) (*aggregator.Clientset, error) {
+func NewAPIRegistrationClient(c *rest.Config) (aggregator.Interface, error) {
 	return aggregator.NewForConfig(c)
 }
 

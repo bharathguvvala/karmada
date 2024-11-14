@@ -31,7 +31,7 @@ const (
 	// EtcdDefaultVersion defines the default of the karmada etcd image tag
 	EtcdDefaultVersion = "3.5.13-0"
 	// KubeDefaultVersion defines the default of the karmada apiserver and kubeControllerManager image tag
-	KubeDefaultVersion = "v1.29.6"
+	KubeDefaultVersion = "v1.30.4"
 	// KarmadaDefaultServiceSubnet defines the default of the subnet used by k8s services.
 	KarmadaDefaultServiceSubnet = "10.96.0.0/12"
 	// KarmadaDefaultDNSDomain defines the default of the DNSDomain
@@ -77,6 +77,16 @@ const (
 	KarmadaAPIserverListenClientPort = 5443
 	// EtcdDataVolumeName defines the name to etcd data volume
 	EtcdDataVolumeName = "etcd-data"
+	// EtcdClientCredentialsVolumeName defines the name of the volume for the etcd client credentials
+	EtcdClientCredentialsVolumeName = "etcd-client-cert" // #nosec G101
+	// EtcdClientCredentialsMountPath defines the mount path for the etcd client credentials data
+	EtcdClientCredentialsMountPath = "/etc/karmada/pki/etcd-client" // #nosec G101
+	// CaCertDataKey defines the data key for a CA cert
+	CaCertDataKey = "ca.crt"
+	// TLSCertDataKey defines the data key for a TLS cert
+	TLSCertDataKey = "tls.crt"
+	// TLSPrivateKeyDataKey defines the data key for a TLS cert private key
+	TLSPrivateKeyDataKey = "tls.key"
 
 	// CertificateValidity Certificate validity period
 	CertificateValidity = time.Hour * 24 * 365

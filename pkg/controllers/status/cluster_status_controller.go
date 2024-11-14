@@ -58,7 +58,7 @@ import (
 )
 
 const (
-	// ControllerName is the controller name that will be used when reporting events.
+	// ControllerName is the controller name that will be used when reporting events and metrics.
 	ControllerName            = "cluster-status-controller"
 	clusterReady              = "ClusterReady"
 	clusterHealthy            = "cluster is healthy and ready to accept workloads"
@@ -67,6 +67,10 @@ const (
 	clusterNotReachableReason = "ClusterNotReachable"
 	clusterNotReachableMsg    = "cluster is not reachable"
 	statusCollectionFailed    = "StatusCollectionFailed"
+
+	apiEnablementsComplete             = "Complete"
+	apiEnablementPartialAPIEnablements = "Partial"
+	apiEnablementEmptyAPIEnablements   = "Empty"
 )
 
 var (
@@ -167,6 +171,7 @@ func (c *ClusterStatusController) SetupWithManager(mgr controllerruntime.Manager
 		failureThreshold: c.ClusterFailureThreshold.Duration,
 	}
 	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(ControllerName).
 		For(&clusterv1alpha1.Cluster{}, builder.WithPredicates(c.PredicateFunc)).
 		WithOptions(controller.Options{
 			RateLimiter: ratelimiterflag.DefaultControllerRateLimiter(c.RateLimiterOptions),
@@ -214,29 +219,42 @@ func (c *ClusterStatusController) syncClusterStatus(ctx context.Context, cluster
 		//  can be safely removed from current controller.
 		c.initializeGenericInformerManagerForCluster(clusterClient)
 
-		err = c.setCurrentClusterStatus(clusterClient, cluster, &currentClusterStatus)
+		var conditions []metav1.Condition
+		conditions, err = c.setCurrentClusterStatus(clusterClient, cluster, &currentClusterStatus)
 		if err != nil {
 			return err
 		}
+		conditions = append(conditions, *readyCondition)
+		return c.updateStatusIfNeeded(ctx, cluster, currentClusterStatus, conditions...)
 	}
 
 	return c.updateStatusIfNeeded(ctx, cluster, currentClusterStatus, *readyCondition)
 }
 
-func (c *ClusterStatusController) setCurrentClusterStatus(clusterClient *util.ClusterClient, cluster *clusterv1alpha1.Cluster, currentClusterStatus *clusterv1alpha1.ClusterStatus) error {
+func (c *ClusterStatusController) setCurrentClusterStatus(clusterClient *util.ClusterClient, cluster *clusterv1alpha1.Cluster, currentClusterStatus *clusterv1alpha1.ClusterStatus) ([]metav1.Condition, error) {
+	var conditions []metav1.Condition
 	clusterVersion, err := getKubernetesVersion(clusterClient)
 	if err != nil {
 		klog.Errorf("Failed to get Kubernetes version for Cluster %s. Error: %v.", cluster.GetName(), err)
 	}
 	currentClusterStatus.KubernetesVersion = clusterVersion
 
+	var apiEnablementCondition metav1.Condition
 	// get the list of APIs installed in the member cluster
 	apiEnables, err := getAPIEnablements(clusterClient)
 	if len(apiEnables) == 0 {
+		apiEnablementCondition = util.NewCondition(clusterv1alpha1.ClusterConditionCompleteAPIEnablements,
+			apiEnablementEmptyAPIEnablements, "collected empty APIEnablements from the cluster", metav1.ConditionFalse)
 		klog.Errorf("Failed to get any APIs installed in Cluster %s. Error: %v.", cluster.GetName(), err)
 	} else if err != nil {
+		apiEnablementCondition = util.NewCondition(clusterv1alpha1.ClusterConditionCompleteAPIEnablements,
+			apiEnablementPartialAPIEnablements, fmt.Sprintf("might collect partial APIEnablements(%d) from the cluster", len(apiEnables)), metav1.ConditionFalse)
 		klog.Warningf("Maybe get partial(%d) APIs installed in Cluster %s. Error: %v.", len(apiEnables), cluster.GetName(), err)
+	} else {
+		apiEnablementCondition = util.NewCondition(clusterv1alpha1.ClusterConditionCompleteAPIEnablements,
+			apiEnablementsComplete, "collected complete APIEnablements from the cluster", metav1.ConditionTrue)
 	}
+	conditions = append(conditions, apiEnablementCondition)
 	currentClusterStatus.APIEnablements = apiEnables
 
 	if c.EnableClusterResourceModeling {
@@ -246,7 +264,7 @@ func (c *ClusterStatusController) setCurrentClusterStatus(clusterClient *util.Cl
 			klog.Errorf("Failed to get or create informer for Cluster %s. Error: %v.", cluster.GetName(), err)
 			// in large-scale clusters, the timeout may occur.
 			// if clusterInformerManager fails to be built, should be returned, otherwise, it may cause a nil pointer
-			return err
+			return nil, err
 		}
 		nodes, err := listNodes(clusterInformerManager)
 		if err != nil {
@@ -264,7 +282,7 @@ func (c *ClusterStatusController) setCurrentClusterStatus(clusterClient *util.Cl
 			currentClusterStatus.ResourceSummary.AllocatableModelings = getAllocatableModelings(cluster, nodes, pods)
 		}
 	}
-	return nil
+	return conditions, nil
 }
 
 func setStatusCollectionFailedCondition(ctx context.Context, c client.Client, cluster *clusterv1alpha1.Cluster, message string) error {
@@ -434,9 +452,9 @@ func getClusterHealthStatus(clusterClient *util.ClusterClient) (online, healthy 
 	return true, true
 }
 
-func healthEndpointCheck(client *clientset.Clientset, path string) (int, error) {
+func healthEndpointCheck(client clientset.Interface, path string) (int, error) {
 	var healthStatus int
-	resp := client.DiscoveryClient.RESTClient().Get().AbsPath(path).Do(context.TODO()).StatusCode(&healthStatus)
+	resp := client.Discovery().RESTClient().Get().AbsPath(path).Do(context.TODO()).StatusCode(&healthStatus)
 	return healthStatus, resp.Error()
 }
 

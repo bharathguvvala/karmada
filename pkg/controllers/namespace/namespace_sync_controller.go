@@ -48,7 +48,7 @@ import (
 )
 
 const (
-	// ControllerName is the controller name that will be used when reporting events.
+	// ControllerName is the controller name that will be used when reporting events and metrics.
 	ControllerName = "namespace-sync-controller"
 )
 
@@ -157,7 +157,7 @@ func (c *Controller) buildWorks(ctx context.Context, namespace *corev1.Namespace
 				Annotations: annotations,
 			}
 
-			if err = helper.CreateOrUpdateWork(ctx, c.Client, objectMeta, clonedNamespaced, nil); err != nil {
+			if err = helper.CreateOrUpdateWork(ctx, c.Client, objectMeta, clonedNamespaced); err != nil {
 				ch <- fmt.Errorf("sync namespace(%s) to cluster(%s) failed due to: %v", clonedNamespaced.GetName(), cluster.GetName(), err)
 				return
 			}
@@ -273,6 +273,7 @@ func (c *Controller) SetupWithManager(mgr controllerruntime.Manager) error {
 	})
 
 	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(ControllerName).
 		For(&corev1.Namespace{}).
 		Watches(&clusterv1alpha1.Cluster{},
 			handler.EnqueueRequestsFromMapFunc(clusterNamespaceFn),

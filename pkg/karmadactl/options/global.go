@@ -49,6 +49,11 @@ func AddKubeConfigFlags(flags *pflag.FlagSet) {
 	flags.StringVar(DefaultConfigFlags.Context, "karmada-context", *DefaultConfigFlags.Context, "The name of the kubeconfig context to use")
 }
 
+// AddNamespaceFlag add namespace flag to the specified FlagSet.
+func AddNamespaceFlag(flags *pflag.FlagSet) {
+	flags.StringVarP(DefaultConfigFlags.Namespace, "namespace", "n", *DefaultConfigFlags.Namespace, "If present, the namespace scope for this CLI request.")
+}
+
 // OperationScope defines the operation scope of a command.
 type OperationScope string
 
@@ -57,7 +62,7 @@ func (o *OperationScope) String() string {
 	return string(*o)
 }
 
-// Set vaule to OperationScope
+// Set value to OperationScope
 func (o *OperationScope) Set(s string) error {
 	switch s {
 	case "":

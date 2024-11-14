@@ -44,7 +44,7 @@ import (
 )
 
 const (
-	// SyncControllerName is the controller name that will be used when reporting events.
+	// SyncControllerName is the controller name that will be used when reporting events and metrics.
 	SyncControllerName = "federated-resource-quota-sync-controller"
 )
 
@@ -129,6 +129,7 @@ func (c *SyncController) SetupWithManager(mgr controllerruntime.Manager) error {
 	})
 
 	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(SyncControllerName).
 		For(&policyv1alpha1.FederatedResourceQuota{}).
 		Watches(&clusterv1alpha1.Cluster{}, handler.EnqueueRequestsFromMapFunc(fn), clusterPredicate).
 		Complete(c)
@@ -183,7 +184,7 @@ func (c *SyncController) buildWorks(ctx context.Context, quota *policyv1alpha1.F
 			},
 		}
 
-		err = helper.CreateOrUpdateWork(ctx, c.Client, objectMeta, resourceQuotaObj, nil)
+		err = helper.CreateOrUpdateWork(ctx, c.Client, objectMeta, resourceQuotaObj)
 		if err != nil {
 			errs = append(errs, err)
 		}

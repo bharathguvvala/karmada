@@ -25,7 +25,6 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
-	"errors"
 	"fmt"
 	"math"
 	"math/big"
@@ -247,14 +246,20 @@ func (cert *KarmadaCert) KeyName() string {
 	return pair + keyExtension
 }
 
-// GeneratePrivateKey generates cert key with default size if 1024. it supports
-// ECDSA and RAS algorithm.
+// GeneratePrivateKey generates a certificate key. It supports both
+// ECDSA (using the P-256 elliptic curve) and RSA algorithms. For RSA,
+// the key is generated with a size of 3072 bits. If the keyType is
+// x509.UnknownPublicKeyAlgorithm, the function defaults to generating
+// an RSA key.
 func GeneratePrivateKey(keyType x509.PublicKeyAlgorithm) (crypto.Signer, error) {
-	if keyType == x509.ECDSA {
+	switch keyType {
+	case x509.ECDSA:
 		return ecdsa.GenerateKey(elliptic.P256(), cryptorand.Reader)
+	case x509.RSA, x509.UnknownPublicKeyAlgorithm:
+		return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
+	default:
+		return nil, fmt.Errorf("unsupported key type: %T, supported key types are RSA and ECDSA", keyType)
 	}
-
-	return rsa.GenerateKey(cryptorand.Reader, rsaKeySize)
 }
 
 // NewCertificateAuthority creates new certificate and private key for the certificate authority
@@ -428,7 +433,7 @@ func ParsePrivateKeyPEM(keyData []byte) (crypto.Signer, error) {
 	case *ecdsa.PrivateKey:
 		key = k
 	default:
-		return nil, errors.New("the private key is neither in RSA nor ECDSA format")
+		return nil, fmt.Errorf("the private key is in an unsupported format: %s, supported formats are RSA and ECDSA", caPrivateKey)
 	}
 
 	return key, nil
@@ -455,7 +460,7 @@ func etcdServerAltNamesMutator(cfg *AltNamesMutatorConfig) (*certutil.AltNames, 
 		IPs:      []net.IP{net.IPv4(127, 0, 0, 1)},
 	}
 
-	if cfg.Components.Etcd.Local != nil {
+	if cfg.Components != nil && cfg.Components.Etcd != nil && cfg.Components.Etcd.Local != nil {
 		appendSANsToAltNames(altNames, cfg.Components.Etcd.Local.ServerCertSANs)
 	}
 
@@ -488,7 +493,7 @@ func apiServerAltNamesMutator(cfg *AltNamesMutatorConfig) (*certutil.AltNames, e
 			fmt.Sprintf("*.%s.svc", cfg.Namespace)})
 	}
 
-	if len(cfg.Components.KarmadaAPIServer.CertSANs) > 0 {
+	if cfg.Components != nil && cfg.Components.KarmadaAPIServer != nil && len(cfg.Components.KarmadaAPIServer.CertSANs) > 0 {
 		appendSANsToAltNames(altNames, cfg.Components.KarmadaAPIServer.CertSANs)
 	}
 	if len(cfg.ControlplaneAddress) > 0 {

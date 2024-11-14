@@ -36,6 +36,7 @@ import (
 	netutils "k8s.io/utils/net"
 
 	"github.com/karmada-io/karmada/pkg/karmadactl/cmdinit/cert"
+	initConfig "github.com/karmada-io/karmada/pkg/karmadactl/cmdinit/config"
 	"github.com/karmada-io/karmada/pkg/karmadactl/cmdinit/karmada"
 	"github.com/karmada-io/karmada/pkg/karmadactl/cmdinit/options"
 	"github.com/karmada-io/karmada/pkg/karmadactl/cmdinit/utils"
@@ -134,6 +135,7 @@ type CommandInitOption struct {
 	EtcdStorageMode                    string
 	EtcdHostDataPath                   string
 	EtcdNodeSelectorLabels             string
+	EtcdNodeSelectorLabelsMap          map[string]string
 	EtcdPersistentVolumeSize           string
 	ExternalEtcdCACertPath             string
 	ExternalEtcdClientCertPath         string
@@ -173,15 +175,12 @@ type CommandInitOption struct {
 	WaitComponentReadyTimeout          int
 	CaCertFile                         string
 	CaKeyFile                          string
+	KarmadaInitFilePath                string
 }
 
 func (i *CommandInitOption) validateLocalEtcd(parentCommand string) error {
 	if i.EtcdStorageMode == etcdStorageModeHostPath && i.EtcdHostDataPath == "" {
 		return fmt.Errorf("when etcd storage mode is hostPath, dataPath is not empty. See '%s init --help'", parentCommand)
-	}
-
-	if i.EtcdStorageMode == etcdStorageModeHostPath && i.EtcdNodeSelectorLabels != "" && utils.StringToMap(i.EtcdNodeSelectorLabels) == nil {
-		return fmt.Errorf("the label does not seem to be 'key=value'")
 	}
 
 	if i.EtcdStorageMode == etcdStorageModeHostPath && i.EtcdReplicas != 1 {
@@ -222,6 +221,16 @@ func (i *CommandInitOption) isExternalEtcdProvided() bool {
 
 // Validate Check that there are enough flags to run the command.
 func (i *CommandInitOption) Validate(parentCommand string) error {
+	if i.KarmadaInitFilePath != "" {
+		cfg, err := initConfig.LoadInitConfiguration(i.KarmadaInitFilePath)
+		if err != nil {
+			return fmt.Errorf("failed to load karmada init configuration: %v", err)
+		}
+		if err := i.parseInitConfig(cfg); err != nil {
+			return fmt.Errorf("failed to parse karmada init configuration: %v", err)
+		}
+	}
+
 	if i.KarmadaAPIServerAdvertiseAddress != "" {
 		if netutils.ParseIPSloppy(i.KarmadaAPIServerAdvertiseAddress) == nil {
 			return fmt.Errorf("karmada apiserver advertise address is not valid")
@@ -274,12 +283,18 @@ func (i *CommandInitOption) Complete() error {
 	}
 	klog.Infof("karmada apiserver ip: %s", i.KarmadaAPIServerIP)
 
-	if !i.isExternalEtcdProvided() && i.EtcdStorageMode == "hostPath" && i.EtcdNodeSelectorLabels != "" {
-		if !i.isNodeExist(i.EtcdNodeSelectorLabels) {
-			return fmt.Errorf("no node found by label %s", i.EtcdNodeSelectorLabels)
-		}
+	if err := i.handleEtcdNodeSelectorLabels(); err != nil {
+		return err
 	}
 
+	if !i.isExternalEtcdProvided() && i.EtcdStorageMode == "hostPath" && i.EtcdNodeSelectorLabels != "" {
+		labels := strings.Split(i.EtcdNodeSelectorLabels, ",")
+		for _, label := range labels {
+			if !i.isNodeExist(label) {
+				return fmt.Errorf("no node found by label %s", label)
+			}
+		}
+	}
 	return initializeDirectory(i.KarmadaDataPath)
 }
 
@@ -714,6 +729,21 @@ func (i *CommandInitOption) getImagePullSecrets() []corev1.LocalObjectReference 
 	return imagePullSecrets
 }
 
+func (i *CommandInitOption) handleEtcdNodeSelectorLabels() error {
+	if i.EtcdStorageMode == etcdStorageModeHostPath && i.EtcdNodeSelectorLabels != "" {
+		selector, err := metav1.ParseToLabelSelector(i.EtcdNodeSelectorLabels)
+		if err != nil {
+			return fmt.Errorf("the etcdNodeSelector format is incorrect: %s", err)
+		}
+		labelMap, err := metav1.LabelSelectorAsMap(selector)
+		if err != nil {
+			return fmt.Errorf("failed to convert etcdNodeSelector labels to map: %v", err)
+		}
+		i.EtcdNodeSelectorLabelsMap = labelMap
+	}
+	return nil
+}
+
 func generateServerURL(serverIP string, nodePort int32) (string, error) {
 	_, ipType, err := utils.ParseIP(serverIP)
 	if err != nil {
@@ -728,4 +758,226 @@ func generateServerURL(serverIP string, nodePort int32) (string, error) {
 // SupportedStorageMode Return install etcd supported storage mode
 func SupportedStorageMode() []string {
 	return []string{etcdStorageModeEmptyDir, etcdStorageModeHostPath, etcdStorageModePVC}
+}
+
+// parseEtcdNodeSelectorLabelsMap parse etcd node selector labels
+func (i *CommandInitOption) parseEtcdNodeSelectorLabelsMap() error {
+	if i.EtcdNodeSelectorLabels == "" {
+		return nil
+	}
+	// Parse the label selector string into a LabelSelector object
+	selector, err := metav1.ParseToLabelSelector(i.EtcdNodeSelectorLabels)
+	if err != nil {
+		return fmt.Errorf("the etcdNodeSelector format is incorrect: %s", err)
+	}
+	// Convert the LabelSelector object into a map[string]string
+	labelMap, err := metav1.LabelSelectorAsMap(selector)
+	if err != nil {
+		return fmt.Errorf("failed to convert etcdNodeSelector labels to map: %v", err)
+	}
+	i.EtcdNodeSelectorLabelsMap = labelMap
+	return nil
+}
+
+// parseInitConfig parses fields from KarmadaInitConfig into CommandInitOption.
+// It is responsible for delegating the parsing of various configuration sections,
+// such as certificates, etcd, and control plane components.
+func (i *CommandInitOption) parseInitConfig(cfg *initConfig.KarmadaInitConfig) error {
+	spec := cfg.Spec
+
+	i.parseGeneralConfig(spec)
+	i.parseCertificateConfig(spec.Certificates)
+	i.parseEtcdConfig(spec.Etcd)
+	i.parseControlPlaneConfig(spec.Components)
+
+	setIfNotEmpty(&i.KarmadaDataPath, spec.KarmadaDataPath)
+	setIfNotEmpty(&i.KarmadaPkiPath, spec.KarmadaPKIPath)
+	setIfNotEmpty(&i.HostClusterDomain, spec.HostCluster.Domain)
+	setIfNotEmpty(&i.CRDs, spec.KarmadaCRDs)
+
+	return nil
+}
+
+// parseGeneralConfig parses basic configuration related to the host cluster,
+// such as namespace, kubeconfig, and image settings from the KarmadaInitConfigSpec.
+func (i *CommandInitOption) parseGeneralConfig(spec initConfig.KarmadaInitSpec) {
+	setIfNotEmpty(&i.KubeConfig, spec.HostCluster.Kubeconfig)
+	setIfNotEmpty(&i.KubeImageTag, spec.Images.KubeImageTag)
+	setIfNotEmpty(&i.KubeImageRegistry, spec.Images.KubeImageRegistry)
+	setIfNotEmpty(&i.KubeImageMirrorCountry, spec.Images.KubeImageMirrorCountry)
+
+	if spec.Images.PrivateRegistry != nil {
+		setIfNotEmpty(&i.ImageRegistry, spec.Images.PrivateRegistry.Registry)
+	}
+	setIfNotEmpty(&i.ImagePullPolicy, string(spec.Images.ImagePullPolicy))
+	setIfNotEmpty(&i.Context, spec.HostCluster.Context)
+
+	if len(spec.Images.ImagePullSecrets) != 0 {
+		i.PullSecrets = spec.Images.ImagePullSecrets
+	}
+	setIfNotZero(&i.WaitComponentReadyTimeout, spec.WaitComponentReadyTimeout)
+}
+
+// parseCertificateConfig parses certificate-related configuration, including CA files,
+// external DNS, and external IP from the Certificates configuration block.
+func (i *CommandInitOption) parseCertificateConfig(certificates initConfig.Certificates) {
+	setIfNotEmpty(&i.CaKeyFile, certificates.CAKeyFile)
+	setIfNotEmpty(&i.CaCertFile, certificates.CACertFile)
+
+	if len(certificates.ExternalDNS) > 0 {
+		i.ExternalDNS = joinStringSlice(certificates.ExternalDNS)
+	}
+
+	if len(certificates.ExternalIP) > 0 {
+		i.ExternalIP = joinStringSlice(certificates.ExternalIP)
+	}
+
+	if certificates.ValidityPeriod.Duration != 0 {
+		i.CertValidity = certificates.ValidityPeriod.Duration
+	}
+}
+
+// parseEtcdConfig handles the parsing of both local and external Etcd configurations.
+func (i *CommandInitOption) parseEtcdConfig(etcd initConfig.Etcd) {
+	if etcd.Local != nil {
+		i.parseLocalEtcdConfig(etcd.Local)
+	} else if etcd.External != nil {
+		i.parseExternalEtcdConfig(etcd.External)
+	}
+}
+
+// parseLocalEtcdConfig parses the local Etcd settings, including image information,
+// data path, PVC size, and node selector labels.
+func (i *CommandInitOption) parseLocalEtcdConfig(localEtcd *initConfig.LocalEtcd) {
+	setIfNotEmpty(&i.EtcdImage, localEtcd.CommonSettings.Image.GetImage())
+	setIfNotEmpty(&i.EtcdInitImage, localEtcd.InitImage.GetImage())
+	setIfNotEmpty(&i.EtcdHostDataPath, localEtcd.DataPath)
+	setIfNotEmpty(&i.EtcdPersistentVolumeSize, localEtcd.PVCSize)
+
+	if len(localEtcd.NodeSelectorLabels) != 0 {
+		i.EtcdNodeSelectorLabels = mapToString(localEtcd.NodeSelectorLabels)
+	}
+
+	setIfNotEmpty(&i.EtcdStorageMode, localEtcd.StorageMode)
+	setIfNotEmpty(&i.StorageClassesName, localEtcd.StorageClassesName)
+	setIfNotZeroInt32(&i.EtcdReplicas, localEtcd.Replicas)
+}
+
+// parseExternalEtcdConfig parses the external Etcd configuration, including CA file,
+// client certificates, and endpoints.
+func (i *CommandInitOption) parseExternalEtcdConfig(externalEtcd *initConfig.ExternalEtcd) {
+	setIfNotEmpty(&i.ExternalEtcdCACertPath, externalEtcd.CAFile)
+	setIfNotEmpty(&i.ExternalEtcdClientCertPath, externalEtcd.CertFile)
+	setIfNotEmpty(&i.ExternalEtcdClientKeyPath, externalEtcd.KeyFile)
+
+	if len(externalEtcd.Endpoints) > 0 {
+		i.ExternalEtcdServers = strings.Join(externalEtcd.Endpoints, ",")
+	}
+	setIfNotEmpty(&i.ExternalEtcdKeyPrefix, externalEtcd.KeyPrefix)
+}
+
+// parseControlPlaneConfig parses the configuration for various control plane components,
+// including API Server, Controller Manager, Scheduler, and Webhook.
+func (i *CommandInitOption) parseControlPlaneConfig(components initConfig.KarmadaComponents) {
+	i.parseKarmadaAPIServerConfig(components.KarmadaAPIServer)
+	i.parseKarmadaControllerManagerConfig(components.KarmadaControllerManager)
+	i.parseKarmadaSchedulerConfig(components.KarmadaScheduler)
+	i.parseKarmadaWebhookConfig(components.KarmadaWebhook)
+	i.parseKarmadaAggregatedAPIServerConfig(components.KarmadaAggregatedAPIServer)
+	i.parseKubeControllerManagerConfig(components.KubeControllerManager)
+}
+
+// parseKarmadaAPIServerConfig parses the configuration for the Karmada API Server component,
+// including image and replica settings, as well as advertise address.
+func (i *CommandInitOption) parseKarmadaAPIServerConfig(apiServer *initConfig.KarmadaAPIServer) {
+	if apiServer != nil {
+		setIfNotZeroInt32(&i.KarmadaAPIServerNodePort, apiServer.Networking.Port)
+		setIfNotEmpty(&i.Namespace, apiServer.Networking.Namespace)
+		setIfNotEmpty(&i.KarmadaAPIServerImage, apiServer.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KarmadaAPIServerReplicas, apiServer.CommonSettings.Replicas)
+		setIfNotEmpty(&i.KarmadaAPIServerAdvertiseAddress, apiServer.AdvertiseAddress)
+	}
+}
+
+// parseKarmadaControllerManagerConfig parses the configuration for the Karmada Controller Manager,
+// including image and replica settings.
+func (i *CommandInitOption) parseKarmadaControllerManagerConfig(manager *initConfig.KarmadaControllerManager) {
+	if manager != nil {
+		setIfNotEmpty(&i.KarmadaControllerManagerImage, manager.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KarmadaControllerManagerReplicas, manager.CommonSettings.Replicas)
+	}
+}
+
+// parseKarmadaSchedulerConfig parses the configuration for the Karmada Scheduler,
+// including image and replica settings.
+func (i *CommandInitOption) parseKarmadaSchedulerConfig(scheduler *initConfig.KarmadaScheduler) {
+	if scheduler != nil {
+		setIfNotEmpty(&i.KarmadaSchedulerImage, scheduler.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KarmadaSchedulerReplicas, scheduler.CommonSettings.Replicas)
+	}
+}
+
+// parseKarmadaWebhookConfig parses the configuration for the Karmada Webhook,
+// including image and replica settings.
+func (i *CommandInitOption) parseKarmadaWebhookConfig(webhook *initConfig.KarmadaWebhook) {
+	if webhook != nil {
+		setIfNotEmpty(&i.KarmadaWebhookImage, webhook.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KarmadaWebhookReplicas, webhook.CommonSettings.Replicas)
+	}
+}
+
+// parseKarmadaAggregatedAPIServerConfig parses the configuration for the Karmada Aggregated API Server,
+// including image and replica settings.
+func (i *CommandInitOption) parseKarmadaAggregatedAPIServerConfig(aggregatedAPIServer *initConfig.KarmadaAggregatedAPIServer) {
+	if aggregatedAPIServer != nil {
+		setIfNotEmpty(&i.KarmadaAggregatedAPIServerImage, aggregatedAPIServer.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KarmadaAggregatedAPIServerReplicas, aggregatedAPIServer.CommonSettings.Replicas)
+	}
+}
+
+// parseKubeControllerManagerConfig parses the configuration for the Kube Controller Manager,
+// including image and replica settings.
+func (i *CommandInitOption) parseKubeControllerManagerConfig(manager *initConfig.KubeControllerManager) {
+	if manager != nil {
+		setIfNotEmpty(&i.KubeControllerManagerImage, manager.CommonSettings.Image.GetImage())
+		setIfNotZeroInt32(&i.KubeControllerManagerReplicas, manager.CommonSettings.Replicas)
+	}
+}
+
+// mapToString converts a map to a comma-separated key=value string.
+func mapToString(m map[string]string) string {
+	var builder strings.Builder
+	for k, v := range m {
+		if builder.Len() > 0 {
+			builder.WriteString(",")
+		}
+		builder.WriteString(fmt.Sprintf("%s=%s", k, v))
+	}
+	return builder.String()
+}
+
+// setIfNotEmpty checks if the source string is not empty, and if so, assigns its value to the destination string.
+func setIfNotEmpty(dest *string, src string) {
+	if src != "" {
+		*dest = src
+	}
+}
+
+// setIfNotZero checks if the source integer is not zero, and if so, assigns its value to the destination integer.
+func setIfNotZero(dest *int, src int) {
+	if src != 0 {
+		*dest = src
+	}
+}
+
+// setIfNotZeroInt32 checks if the source int32 is not zero, and if so, assigns its value to the destination int32.
+func setIfNotZeroInt32(dest *int32, src int32) {
+	if src != 0 {
+		*dest = src
+	}
+}
+
+// joinStringSlice joins a slice of strings into a single string separated by commas.
+func joinStringSlice(slice []string) string {
+	return strings.Join(slice, ",")
 }

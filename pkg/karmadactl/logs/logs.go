@@ -27,6 +27,7 @@ import (
 
 	"github.com/karmada-io/karmada/pkg/karmadactl/options"
 	"github.com/karmada-io/karmada/pkg/karmadactl/util"
+	utilcomp "github.com/karmada-io/karmada/pkg/karmadactl/util/completion"
 )
 
 const (
@@ -79,6 +80,7 @@ func NewCmdLogs(f util.Factory, parentCommand string, streams genericiooptions.I
 		SilenceUsage:          true,
 		DisableFlagsInUseLine: true,
 		Example:               fmt.Sprintf(logsExample, parentCommand),
+		ValidArgsFunction:     utilcomp.PodResourceNameAndContainerCompletionFunc(f),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			if err := o.Complete(cmd, args, f); err != nil {
 				return err
@@ -98,10 +100,13 @@ func NewCmdLogs(f util.Factory, parentCommand string, streams genericiooptions.I
 
 	flags := cmd.Flags()
 	options.AddKubeConfigFlags(flags)
-	flags.StringVarP(options.DefaultConfigFlags.Namespace, "namespace", "n", *options.DefaultConfigFlags.Namespace, "If present, the namespace scope for this CLI request")
+	options.AddNamespaceFlag(flags)
 	flags.StringVarP(&o.Cluster, "cluster", "C", "", "Specify a member cluster")
 	o.KubectlLogsOptions.AddFlags(cmd)
 
+	utilcomp.RegisterCompletionFuncForKarmadaContextFlag(cmd)
+	utilcomp.RegisterCompletionFuncForNamespaceFlag(cmd, f)
+	utilcomp.RegisterCompletionFuncForClusterFlag(cmd)
 	return cmd
 }
 

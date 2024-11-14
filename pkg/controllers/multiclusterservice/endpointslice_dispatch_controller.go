@@ -49,7 +49,7 @@ import (
 	"github.com/karmada-io/karmada/pkg/util/names"
 )
 
-// EndpointsliceDispatchControllerName is the controller name that will be used when reporting events.
+// EndpointsliceDispatchControllerName is the controller name that will be used when reporting events and metrics.
 const EndpointsliceDispatchControllerName = "endpointslice-dispatch-controller"
 
 // EndpointsliceDispatchController will reconcile a MultiClusterService object
@@ -160,7 +160,9 @@ func (c *EndpointsliceDispatchController) SetupWithManager(mgr controllerruntime
 			return false
 		},
 	}
-	return controllerruntime.NewControllerManagedBy(mgr).For(&workv1alpha1.Work{}, builder.WithPredicates(workPredicateFun)).
+	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(EndpointsliceDispatchControllerName).
+		For(&workv1alpha1.Work{}, builder.WithPredicates(workPredicateFun)).
 		Watches(&networkingv1alpha1.MultiClusterService{}, handler.EnqueueRequestsFromMapFunc(c.newMultiClusterServiceFunc())).
 		Watches(&clusterv1alpha1.Cluster{}, handler.EnqueueRequestsFromMapFunc(c.newClusterFunc())).
 		Complete(c)
@@ -393,7 +395,7 @@ func (c *EndpointsliceDispatchController) ensureEndpointSliceWork(ctx context.Co
 		klog.Errorf("Failed to convert typed object to unstructured object, error is: %v", err)
 		return err
 	}
-	if err := helper.CreateOrUpdateWork(ctx, c.Client, workMeta, unstructuredEPS, nil); err != nil {
+	if err := helper.CreateOrUpdateWork(ctx, c.Client, workMeta, unstructuredEPS); err != nil {
 		klog.Errorf("Failed to dispatch EndpointSlice %s/%s from %s to cluster %s:%v",
 			work.GetNamespace(), work.GetName(), providerCluster, consumerCluster, err)
 		return err

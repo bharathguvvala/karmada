@@ -18,11 +18,15 @@ package karmada
 
 import (
 	"context"
+	"fmt"
 	"reflect"
 	"strconv"
 	"time"
 
+	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/record"
@@ -37,10 +41,11 @@ import (
 
 	operatorv1alpha1 "github.com/karmada-io/karmada/operator/pkg/apis/operator/v1alpha1"
 	operatorscheme "github.com/karmada-io/karmada/operator/pkg/scheme"
+	"github.com/karmada-io/karmada/operator/pkg/util"
 )
 
 const (
-	// ControllerName is the controller name that will be used when reporting events.
+	// ControllerName is the controller name that will be used when reporting events and metrics.
 	ControllerName = "karmada-operator-controller"
 
 	// ControllerFinalizerName is the name of the karmada controller finalizer
@@ -48,6 +53,9 @@ const (
 
 	// DisableCascadingDeletionLabel is the label that determine whether to perform cascade deletion
 	DisableCascadingDeletionLabel = "operator.karmada.io/disable-cascading-deletion"
+
+	// ValidationErrorReason is the reason for a validation error
+	ValidationErrorReason = "ValidationError"
 )
 
 // Controller controls the Karmada resource.
@@ -77,6 +85,11 @@ func (ctrl *Controller) Reconcile(ctx context.Context, req controllerruntime.Req
 		return controllerruntime.Result{}, err
 	}
 
+	if err := ctrl.validateKarmada(karmada); err != nil {
+		klog.Error(err, "Validation failed for karmada")
+		return controllerruntime.Result{}, nil
+	}
+
 	// The object is being deleted
 	if !karmada.DeletionTimestamp.IsZero() {
 		val, ok := karmada.Labels[DisableCascadingDeletionLabel]
@@ -94,6 +107,31 @@ func (ctrl *Controller) Reconcile(ctx context.Context, req controllerruntime.Req
 	}
 
 	return controllerruntime.Result{}, ctrl.syncKarmada(karmada)
+}
+
+// validateKarmada ensures the Karmada resource adheres to validation rules
+func (ctrl *Controller) validateKarmada(karmada *operatorv1alpha1.Karmada) error {
+	if karmada.Spec.Components.Etcd != nil && karmada.Spec.Components.Etcd.External != nil {
+		expectedSecretName := util.EtcdCertSecretName(karmada.Name)
+		if karmada.Spec.Components.Etcd.External.SecretRef.Name != expectedSecretName {
+			errorMessage := fmt.Sprintf("Secret name for external etcd client must be %s, but got %s", expectedSecretName, karmada.Spec.Components.Etcd.External.SecretRef.Name)
+			ctrl.EventRecorder.Event(karmada, corev1.EventTypeWarning, ValidationErrorReason, errorMessage)
+
+			newCondition := metav1.Condition{
+				Type:               string(operatorv1alpha1.Ready),
+				Status:             metav1.ConditionFalse,
+				Reason:             ValidationErrorReason,
+				Message:            errorMessage,
+				LastTransitionTime: metav1.Now(),
+			}
+			meta.SetStatusCondition(&karmada.Status.Conditions, newCondition)
+			if err := ctrl.Status().Update(context.TODO(), karmada); err != nil {
+				return err
+			}
+			return fmt.Errorf(errorMessage)
+		}
+	}
+	return nil
 }
 
 func (ctrl *Controller) syncKarmada(karmada *operatorv1alpha1.Karmada) error {
@@ -147,6 +185,7 @@ func (ctrl *Controller) ensureKarmada(ctx context.Context, karmada *operatorv1al
 // SetupWithManager creates a controller and register to controller manager.
 func (ctrl *Controller) SetupWithManager(mgr controllerruntime.Manager) error {
 	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(ControllerName).
 		For(&operatorv1alpha1.Karmada{},
 			builder.WithPredicates(predicate.Funcs{
 				UpdateFunc: ctrl.onKarmadaUpdate,

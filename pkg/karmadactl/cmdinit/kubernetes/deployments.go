@@ -92,9 +92,6 @@ func (i *CommandInitOption) karmadaAPIServerContainerCommand() []string {
 		fmt.Sprintf("--etcd-keyfile=%s/%s.key", karmadaCertsVolumeMountPath, options.EtcdClientCertAndKeyName),
 		fmt.Sprintf("--etcd-servers=%s", etcdServers),
 		"--bind-address=0.0.0.0",
-		fmt.Sprintf("--kubelet-client-certificate=%s/%s.crt", karmadaCertsVolumeMountPath, options.KarmadaCertAndKeyName),
-		fmt.Sprintf("--kubelet-client-key=%s/%s.key", karmadaCertsVolumeMountPath, options.KarmadaCertAndKeyName),
-		"--kubelet-preferred-address-types=InternalIP,ExternalIP,Hostname",
 		"--disable-admission-plugins=StorageObjectInUseProtection,ServiceAccount",
 		"--runtime-config=",
 		fmt.Sprintf("--apiserver-count=%v", i.KarmadaAPIServerReplicas),
@@ -452,8 +449,8 @@ func (i *CommandInitOption) makeKarmadaSchedulerDeployment() *appsv1.Deployment 
 				Command: []string{
 					"/bin/karmada-scheduler",
 					"--kubeconfig=/etc/kubeconfig",
-					"--bind-address=0.0.0.0",
-					"--secure-port=10351",
+					"--metrics-bind-address=0.0.0.0:8080",
+					"--health-probe-bind-address=0.0.0.0:10351",
 					"--enable-scheduler-estimator=true",
 					"--leader-elect=true",
 					"--scheduler-estimator-ca-file=/etc/karmada/pki/ca.crt",
@@ -466,7 +463,7 @@ func (i *CommandInitOption) makeKarmadaSchedulerDeployment() *appsv1.Deployment 
 				Ports: []corev1.ContainerPort{
 					{
 						Name:          metricsPortName,
-						ContainerPort: 10351,
+						ContainerPort: 8080,
 						Protocol:      corev1.ProtocolTCP,
 					},
 				},
@@ -591,10 +588,9 @@ func (i *CommandInitOption) makeKarmadaControllerManagerDeployment() *appsv1.Dep
 				Command: []string{
 					"/bin/karmada-controller-manager",
 					"--kubeconfig=/etc/kubeconfig",
-					"--bind-address=0.0.0.0",
 					"--metrics-bind-address=:8080",
+					"--health-probe-bind-address=0.0.0.0:10357",
 					"--cluster-status-update-frequency=10s",
-					"--secure-port=10357",
 					fmt.Sprintf("--leader-elect-resource-namespace=%s", i.Namespace),
 					"--v=4",
 				},

@@ -38,6 +38,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/predicate"
 
 	clusterv1alpha1 "github.com/karmada-io/karmada/pkg/apis/cluster/v1alpha1"
+	configv1alpha1 "github.com/karmada-io/karmada/pkg/apis/config/v1alpha1"
 	workv1alpha1 "github.com/karmada-io/karmada/pkg/apis/work/v1alpha1"
 	workv1alpha2 "github.com/karmada-io/karmada/pkg/apis/work/v1alpha2"
 	"github.com/karmada-io/karmada/pkg/events"
@@ -54,7 +55,7 @@ import (
 	"github.com/karmada-io/karmada/pkg/util/restmapper"
 )
 
-// WorkStatusControllerName is the controller name that will be used when reporting events.
+// WorkStatusControllerName is the controller name that will be used when reporting events and metrics.
 const WorkStatusControllerName = "work-status-controller"
 
 // WorkStatusController is to sync status of Work.
@@ -169,7 +170,7 @@ func generateKey(obj interface{}) (util.QueueKey, error) {
 func getClusterNameFromAnnotation(resource *unstructured.Unstructured) (string, error) {
 	workNamespace, exist := resource.GetAnnotations()[workv1alpha2.WorkNamespaceAnnotation]
 	if !exist {
-		klog.V(4).Infof("Ignore resource(kind=%s, %s/%s) which is not managed by Karmada.", resource.GetKind(), resource.GetNamespace(), resource.GetName())
+		klog.V(5).Infof("Ignore resource(kind=%s, %s/%s) which is not managed by Karmada.", resource.GetKind(), resource.GetNamespace(), resource.GetName())
 		return "", nil
 	}
 
@@ -365,20 +366,7 @@ func (c *WorkStatusController) reflectStatus(ctx context.Context, work *workv1al
 	}
 	c.EventRecorder.Eventf(work, corev1.EventTypeNormal, events.EventReasonReflectStatusSucceed, "Reflect status for object(%s/%s/%s) succeed.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName())
 
-	var resourceHealth workv1alpha1.ResourceHealth
-	// When an unregistered resource kind is requested with the ResourceInterpreter,
-	// the interpreter will return an error, we treat its health status as Unknown.
-	healthy, err := c.ResourceInterpreter.InterpretHealth(clusterObj)
-	if err != nil {
-		resourceHealth = workv1alpha1.ResourceUnknown
-		c.EventRecorder.Eventf(work, corev1.EventTypeWarning, events.EventReasonInterpretHealthFailed, "Interpret health of object(%s/%s/%s) failed, err: %s.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName(), err.Error())
-	} else if healthy {
-		resourceHealth = workv1alpha1.ResourceHealthy
-		c.EventRecorder.Eventf(work, corev1.EventTypeNormal, events.EventReasonInterpretHealthSucceed, "Interpret health of object(%s/%s/%s) as healthy.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName())
-	} else {
-		resourceHealth = workv1alpha1.ResourceUnhealthy
-		c.EventRecorder.Eventf(work, corev1.EventTypeNormal, events.EventReasonInterpretHealthSucceed, "Interpret health of object(%s/%s/%s) as unhealthy.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName())
-	}
+	resourceHealth := c.interpretHealth(clusterObj, work)
 
 	identifier, err := c.buildStatusIdentifier(work, clusterObj)
 	if err != nil {
@@ -398,6 +386,28 @@ func (c *WorkStatusController) reflectStatus(ctx context.Context, work *workv1al
 		})
 		return err
 	})
+}
+
+func (c *WorkStatusController) interpretHealth(clusterObj *unstructured.Unstructured, work *workv1alpha1.Work) workv1alpha1.ResourceHealth {
+	// For kind that doesn't have health check, we treat it as healthy.
+	if !c.ResourceInterpreter.HookEnabled(clusterObj.GroupVersionKind(), configv1alpha1.InterpreterOperationInterpretHealth) {
+		klog.V(5).Infof("skipping health assessment for object: %v %s/%s as missing customization and will treat it as healthy.", clusterObj.GroupVersionKind(), clusterObj.GetNamespace(), clusterObj.GetName())
+		return workv1alpha1.ResourceHealthy
+	}
+
+	var resourceHealth workv1alpha1.ResourceHealth
+	healthy, err := c.ResourceInterpreter.InterpretHealth(clusterObj)
+	if err != nil {
+		resourceHealth = workv1alpha1.ResourceUnknown
+		c.EventRecorder.Eventf(work, corev1.EventTypeWarning, events.EventReasonInterpretHealthFailed, "Interpret health of object(%s/%s/%s) failed, err: %s.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName(), err.Error())
+	} else if healthy {
+		resourceHealth = workv1alpha1.ResourceHealthy
+		c.EventRecorder.Eventf(work, corev1.EventTypeNormal, events.EventReasonInterpretHealthSucceed, "Interpret health of object(%s/%s/%s) as healthy.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName())
+	} else {
+		resourceHealth = workv1alpha1.ResourceUnhealthy
+		c.EventRecorder.Eventf(work, corev1.EventTypeNormal, events.EventReasonInterpretHealthSucceed, "Interpret health of object(%s/%s/%s) as unhealthy.", clusterObj.GetKind(), clusterObj.GetNamespace(), clusterObj.GetName())
+	}
+	return resourceHealth
 }
 
 func (c *WorkStatusController) buildStatusIdentifier(work *workv1alpha1.Work, clusterObj *unstructured.Unstructured) (*workv1alpha1.ResourceIdentifier, error) {
@@ -536,6 +546,7 @@ func (c *WorkStatusController) getSingleClusterManager(cluster *clusterv1alpha1.
 // SetupWithManager creates a controller and register to controller manager.
 func (c *WorkStatusController) SetupWithManager(mgr controllerruntime.Manager) error {
 	return controllerruntime.NewControllerManagedBy(mgr).
+		Named(WorkStatusControllerName).
 		For(&workv1alpha1.Work{}, builder.WithPredicates(c.PredicateFunc)).
 		WithOptions(controller.Options{
 			RateLimiter: ratelimiterflag.DefaultControllerRateLimiter(c.RateLimiterOptions),
